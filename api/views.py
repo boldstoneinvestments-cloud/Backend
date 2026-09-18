@@ -4,7 +4,7 @@ from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import ContactMessage, Lease, LeaseApplication, Order
-from email import send_lease_application_confirmation
+from email_service import send_lease_application_confirmation
 
 ESTATE = {
     'name': 'Kyenjojo Coffee Estate',
