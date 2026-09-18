@@ -118,5 +118,5 @@ def orders(request):
     if not order_ids:
         return JsonResponse({'error': 'Cart quantity must be at least 1'}, status=400)
     created_orders = list(ShopOrder.objects.filter(id__in=order_ids).select_related('product'))
-    send_shop_order_confirmation(created_orders, invoice_number)
-    return JsonResponse({'success': True, 'orderIds': order_ids, 'invoiceNumber': invoice_number}, status=201)
+    email_sent = send_shop_order_confirmation(created_orders, invoice_number)
+    return JsonResponse({'success': True, 'orderIds': order_ids, 'invoiceNumber': invoice_number, 'emailSent': email_sent}, status=201)

@@ -6,7 +6,7 @@ import resend
 
 logger = logging.getLogger(__name__)
 LOGO_URL = 'https://res.cloudinary.com/cwj8d38f/image/upload/v1789729870/Boldstone_logo_hiv7pl.jpg'
-ADMIN_ORDER_EMAIL = 'boldstone.investments@gmail.com'
+ADMIN_ORDER_EMAIL = os.getenv('RESEND_ADMIN_EMAIL', 'boldstone.investments@gmail.com').strip()
 
 
 def send_lease_application_confirmation(application):
@@ -28,19 +28,20 @@ def send_lease_application_confirmation(application):
         resend.Emails.send({
             'from': sender,
             'to': [application.email],
-            'subject': f'Thank you, {application.full_name} - your lease application',
+            'subject': f'Thank you, {application.full_name} - your land lease request',
             'reply_to': from_email,
             'html': f'''
                 <div style="font-family: Arial, sans-serif; color: #173b34; line-height: 1.6; max-width: 640px;">
                     <div style="padding: 8px 0 24px; text-align: center; border-bottom: 1px solid #dceae6;">
                         <img src="{LOGO_URL}" alt="Boldstone Investments" width="110" height="110" style="display: block; width: 110px; height: 110px; max-width: 100%; margin: 0 auto; border-radius: 50%; object-fit: cover;" />
                     </div>
-                    <h2 style="color: #0f8972;">Thank you for your application, {name}</h2>
+                    <h2 style="color: #0f8972;">Thank you for your interest in leasing land, {name}</h2>
                     <p>Dear {name},</p>
-                    <p>Thank you for your interest in leasing land with Boldstone Investments. We have received your application and appreciate the opportunity to learn more about your plans for coffee farming.</p>
+                    <p>Thank you for choosing Boldstone Investments. We have received your request to lease land with us and appreciate your interest in developing a coffee farm.</p>
                     <p><strong>Selected plan:</strong> {plan}<br><strong>Country:</strong> {country}</p>
-                    <p>Our team will review the information provided and contact you shortly to discuss availability, the application process, and the next steps.</p>
-                    <p>Kind regards,<br><strong>Boldstone Investments Team</strong><br>Coffee farming and agricultural investment in Uganda</p>
+                    <p>Our team will contact you shortly to confirm the payment details, provide more information about the lease, and guide you through the next steps.</p>
+                    <p>We look forward to helping you begin your coffee farming journey with Boldstone Investments.</p>
+                    <p>Kind regards,<br><strong>Boldstone Investments</strong><br>Coffee farming and agricultural investment in Uganda</p>
                 </div>
             ''',
         })
@@ -57,7 +58,7 @@ def send_shop_order_confirmation(orders, invoice_number):
     from_email = os.getenv('RESEND_FROM_EMAIL', '').strip()
     from_name = os.getenv('RESEND_FROM_NAME', 'Boldstone Investments Team').strip()
     if not api_key or not from_email:
-        logger.warning('Resend is not configured; shop order confirmation email was skipped.')
+        logger.error('Order email skipped: RESEND_API_KEY and RESEND_FROM_EMAIL must be configured.')
         return False
 
     resend.api_key = api_key
