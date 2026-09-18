@@ -11,6 +11,17 @@ from shop.models import ShopOrder
 User = get_user_model()
 
 
+def serialize_admin_user(user):
+    return {
+        'id': user.id,
+        'name': user.get_full_name(),
+        'username': user.username,
+        'email': user.email,
+        'is_active': user.is_active,
+        'date_joined': user.date_joined.isoformat(),
+    }
+
+
 @csrf_exempt
 def login_admin(request):
     if request.method != 'POST':
@@ -41,11 +52,7 @@ def admin_users(request):
         return JsonResponse({
             'users': [
                 {
-                    'id': user.id,
-                    'username': user.username,
-                    'email': user.email,
-                    'is_active': user.is_active,
-                    'date_joined': user.date_joined.isoformat(),
+                    **serialize_admin_user(user),
                 }
                 for user in User.objects.filter(is_staff=True).order_by('username')
             ],
@@ -59,11 +66,12 @@ def admin_users(request):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
+    name = str(data.get('name', '')).strip()
     username = str(data.get('username', '')).strip()
     email = str(data.get('email', '')).strip()
     password = str(data.get('password', ''))
-    if not username or not email or not password:
-        return JsonResponse({'error': 'Username, email, and password are required'}, status=400)
+    if not name or not username or not email or not password:
+        return JsonResponse({'error': 'Name, username, email, and password are required'}, status=400)
     if len(password) < 8:
         return JsonResponse({'error': 'Password must be at least 8 characters'}, status=400)
     if User.objects.filter(username=username).exists():
@@ -71,17 +79,59 @@ def admin_users(request):
     if User.objects.filter(email=email).exists():
         return JsonResponse({'error': 'That email is already in use'}, status=409)
 
-    user = User.objects.create_user(username=username, email=email, password=password, is_staff=True, is_active=True)
+    name_parts = name.split(None, 1)
+    user = User.objects.create_user(
+        username=username,
+        email=email,
+        password=password,
+        first_name=name_parts[0],
+        last_name=name_parts[1] if len(name_parts) > 1 else '',
+        is_staff=True,
+        is_active=True,
+    )
     return JsonResponse({
         'success': True,
-        'user': {
-            'id': user.id,
-            'username': user.username,
-            'email': user.email,
-            'is_active': user.is_active,
-            'date_joined': user.date_joined.isoformat(),
-        },
+        'user': serialize_admin_user(user),
     }, status=201)
+
+
+@csrf_exempt
+@login_required
+def admin_user_detail(request, user_id):
+    if request.method != 'PUT':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    user = User.objects.filter(id=user_id, is_staff=True).first()
+    if user is None:
+        return JsonResponse({'error': 'Admin user not found'}, status=404)
+
+    name = str(data.get('name', '')).strip()
+    username = str(data.get('username', '')).strip()
+    email = str(data.get('email', '')).strip()
+    password = str(data.get('password', ''))
+    if not name or not username or not email:
+        return JsonResponse({'error': 'Name, username, and email are required'}, status=400)
+    if password and len(password) < 8:
+        return JsonResponse({'error': 'Password must be at least 8 characters'}, status=400)
+    if User.objects.filter(username=username).exclude(id=user.id).exists():
+        return JsonResponse({'error': 'That username is already in use'}, status=409)
+    if User.objects.filter(email=email).exclude(id=user.id).exists():
+        return JsonResponse({'error': 'That email is already in use'}, status=409)
+
+    name_parts = name.split(None, 1)
+    user.first_name = name_parts[0]
+    user.last_name = name_parts[1] if len(name_parts) > 1 else ''
+    user.username = username
+    user.email = email
+    if password:
+        user.set_password(password)
+    user.save()
+    return JsonResponse({'success': True, 'user': serialize_admin_user(user)})
 
 
 @login_required
