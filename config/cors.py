@@ -13,6 +13,10 @@ class CorsMiddleware:
             for origin in configured_origins.split(',')
             if origin.strip()
         }
+        self.allowed_origins.update({
+            'https://www.boldstoneinvestments.com',
+            'https://boldstoneinvestments.com',
+        })
 
     def __call__(self, request):
         response = self.get_response(request)
