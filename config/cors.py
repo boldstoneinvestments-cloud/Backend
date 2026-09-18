@@ -30,5 +30,6 @@ class CorsMiddleware:
             response['Access-Control-Allow-Origin'] = origin
             response['Access-Control-Allow-Headers'] = 'Content-Type'
             response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            response['Access-Control-Allow-Credentials'] = 'true'
             response['Vary'] = 'Origin'
         return response

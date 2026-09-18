@@ -62,3 +62,7 @@ EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', '1') == '1'
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'webmaster@localhost')
 EMAIL_TO = os.getenv('EMAIL_TO', '')
 STATIC_URL = '/static/'
+SESSION_COOKIE_SAMESITE = 'None' if not DEBUG else 'Lax'
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SAMESITE = 'None' if not DEBUG else 'Lax'
+CSRF_COOKIE_SECURE = not DEBUG
