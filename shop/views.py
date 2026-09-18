@@ -8,6 +8,8 @@ from .models import Product, ShopOrder
 from email_service import send_shop_order_confirmation
 
 
+CATEGORY_ORDER = ['seedlings', 'roasted', 'trees']
+
 def products(request):
     catalog = {}
     for product in Product.objects.filter(active=True):
@@ -22,7 +24,9 @@ def products(request):
             'badge': product.badge,
             'varieties': product.varieties,
         })
-    return JsonResponse(catalog)
+    ordered = {k: catalog[k] for k in CATEGORY_ORDER if k in catalog}
+    ordered.update({k: v for k, v in catalog.items() if k not in ordered})
+    return JsonResponse(ordered)
 
 
 @csrf_exempt
