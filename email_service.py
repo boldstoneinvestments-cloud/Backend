@@ -11,7 +11,7 @@ LOGO_URL = 'https://res.cloudinary.com/cwj8d38f/image/upload/v1789729870/Boldsto
 def send_lease_application_confirmation(application):
     api_key = os.getenv('RESEND_API_KEY', '').strip()
     from_email = os.getenv('RESEND_FROM_EMAIL', '').strip()
-    from_name = os.getenv('RESEND_FROM_NAME', 'Boldstone Investments').strip()
+    from_name = os.getenv('RESEND_FROM_NAME', 'Moses Alicwamu').strip()
 
     if not api_key or not from_email:
         logger.warning('Resend is not configured; lease confirmation email was skipped.')
@@ -27,7 +27,7 @@ def send_lease_application_confirmation(application):
         resend.Emails.send({
             'from': sender,
             'to': [application.email],
-            'subject': f'Thank you, {application.full_name} - Boldstone lease application received',
+            'subject': f'Thank you, {application.full_name} - your lease application',
             'reply_to': from_email,
             'html': f'''
                 <div style="font-family: Arial, sans-serif; color: #173b34; line-height: 1.6; max-width: 640px;">
@@ -36,9 +36,9 @@ def send_lease_application_confirmation(application):
                     </div>
                     <h2 style="color: #0f8972;">Thank you for your application, {name}</h2>
                     <p>Dear {name},</p>
-                    <p>Thank you for your interest in leasing land with Boldstone Investments. We have received your application and appreciate the opportunity to learn more about your plans for coffee farming.</p>
+                    <p>Thank you for your interest in leasing land with Boldstone Investments. I have received your application and appreciate the opportunity to learn more about your plans for coffee farming.</p>
                     <p><strong>Selected plan:</strong> {plan}<br><strong>Country:</strong> {country}</p>
-                    <p>Our team will review the information provided and contact you shortly to discuss availability, the application process, and the next steps.</p>
+                    <p>I will review the information you provided and contact you shortly to discuss availability, the application process, and the next steps.</p>
                     <p>Sincerely,<br><strong>Moses Alicwamu</strong><br>Founder &amp; Managing Director<br>Boldstone Investments</p>
                 </div>
             ''',

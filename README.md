@@ -18,7 +18,7 @@ Create a Railway service from this repository with the service root directory se
 
 Set `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in Railway variables. The deployment creates the admin account automatically, and you can view shop orders at `https://your-backend-domain/admin/shop/shoporder/`.
 
-For personalized lease application confirmations, set `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (a verified Resend sender), and `RESEND_FROM_NAME=Boldstone Investments`. The applicant receives a formal confirmation email after the application is saved.
+For personalized lease application confirmations, set `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (a verified Resend sender), and `RESEND_FROM_NAME=Moses Alicwamu`. The applicant receives a formal confirmation email written in Moses's first-person voice after the application is saved.
 
 ### One-time database reset
 
