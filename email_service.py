@@ -39,7 +39,7 @@ def send_lease_application_confirmation(application):
                     <p>Thank you for your interest in leasing land with Boldstone Investments. We have received your application and appreciate the opportunity to learn more about your plans for coffee farming.</p>
                     <p><strong>Selected plan:</strong> {plan}<br><strong>Country:</strong> {country}</p>
                     <p>Our team will review the information provided and contact you shortly to discuss availability, the application process, and the next steps.</p>
-                    <p>Kind regards,<br><strong>Boldstone Investments</strong><br>Coffee farming and agricultural investment in Uganda</p>
+                    <p>Sincerely,<br><strong>Moses Alicwamu</strong><br>Founder &amp; Managing Director<br>Boldstone Investments</p>
                 </div>
             ''',
         })
