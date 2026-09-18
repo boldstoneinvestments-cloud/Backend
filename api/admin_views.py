@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 
+from .models import Order
 from shop.models import ShopOrder
 
 
@@ -33,20 +34,36 @@ def logout_admin(request):
 
 @login_required
 def admin_orders(request):
-    orders = ShopOrder.objects.select_related('product').order_by('-created_at')
+    shop_orders = ShopOrder.objects.select_related('product').order_by('-created_at')
+    legacy_orders = Order.objects.order_by('-created_at')
+    orders = [
+        {
+            'id': f'shop-{order.id}',
+            'created_at': order.created_at.isoformat(),
+            'name': order.name,
+            'phone': order.phone,
+            'email': order.email,
+            'product': order.product_name,
+            'quantity': order.quantity,
+            'location': order.location,
+            'notes': order.notes,
+        }
+        for order in shop_orders
+    ] + [
+        {
+            'id': f'order-{order.id}',
+            'created_at': order.created_at.isoformat(),
+            'name': order.name,
+            'phone': order.phone,
+            'email': order.email,
+            'product': order.product,
+            'quantity': order.quantity,
+            'location': order.location,
+            'notes': order.notes,
+        }
+        for order in legacy_orders
+    ]
+    orders.sort(key=lambda order: order['created_at'], reverse=True)
     return JsonResponse({
-        'orders': [
-            {
-                'id': order.id,
-                'created_at': order.created_at.isoformat(),
-                'name': order.name,
-                'phone': order.phone,
-                'email': order.email,
-                'product': order.product_name,
-                'quantity': order.quantity,
-                'location': order.location,
-                'notes': order.notes,
-            }
-            for order in orders
-        ],
+        'orders': orders,
     })
