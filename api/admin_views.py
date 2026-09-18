@@ -71,6 +71,30 @@ def admin_orders(request):
     })
 
 
+@csrf_exempt
+@login_required
+def admin_delete_order(request, order_id):
+    if request.method != 'DELETE':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        prefix, raw_id = order_id.split('-', 1)
+        record_id = int(raw_id)
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'Invalid order ID'}, status=400)
+
+    if prefix == 'shop':
+        deleted, _ = ShopOrder.objects.filter(id=record_id).delete()
+    elif prefix == 'order':
+        deleted, _ = Order.objects.filter(id=record_id).delete()
+    else:
+        return JsonResponse({'error': 'Invalid order ID'}, status=400)
+
+    if not deleted:
+        return JsonResponse({'error': 'Order not found'}, status=404)
+    return JsonResponse({'success': True})
+
+
 @login_required
 def admin_lease_applications(request):
     applications = LeaseApplication.objects.order_by('-created_at')
@@ -91,3 +115,15 @@ def admin_lease_applications(request):
             for application in applications
         ],
     })
+
+
+@csrf_exempt
+@login_required
+def admin_delete_lease_application(request, application_id):
+    if request.method != 'DELETE':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    deleted, _ = LeaseApplication.objects.filter(id=application_id).delete()
+    if not deleted:
+        return JsonResponse({'error': 'Application not found'}, status=404)
+    return JsonResponse({'success': True})
