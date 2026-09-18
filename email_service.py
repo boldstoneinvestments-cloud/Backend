@@ -32,7 +32,7 @@ def send_lease_application_confirmation(application):
             'html': f'''
                 <div style="font-family: Arial, sans-serif; color: #173b34; line-height: 1.6; max-width: 640px;">
                     <div style="padding: 8px 0 24px; text-align: center; border-bottom: 1px solid #dceae6;">
-                        <img src="{LOGO_URL}" alt="Boldstone Investments" width="220" style="display: block; width: 220px; max-width: 100%; height: auto; margin: 0 auto;" />
+                        <img src="{LOGO_URL}" alt="Boldstone Investments" width="110" height="110" style="display: block; width: 110px; height: 110px; max-width: 100%; margin: 0 auto; border-radius: 50%; object-fit: cover;" />
                     </div>
                     <h2 style="color: #0f8972;">Thank you for your application, {name}</h2>
                     <p>Dear {name},</p>
