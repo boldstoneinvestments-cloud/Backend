@@ -24,6 +24,8 @@ def create_admin(apps, schema_editor):
         user.save(update_fields=['password'])
     else:
         fields = []
+        user.set_password(password)
+        fields.append('password')
         if email and user.email != email:
             user.email = email
             fields.append('email')

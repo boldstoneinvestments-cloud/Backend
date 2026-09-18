@@ -28,6 +28,8 @@ class Command(BaseCommand):
             return
 
         changed = False
+        user.set_password(password)
+        changed = True
         if email and user.email != email:
             user.email = email
             changed = True
