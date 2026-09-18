@@ -60,9 +60,6 @@ def send_lease_application_confirmation(application):
     plan_included = ''.join(f'<li>{html.escape(item)}</li>' for item in plan_details['included'])
     sender = f'{from_name} <{from_email}>'
     try:
-        plan_title = html.escape(f'{application.plan.replace(" Plan", "")} Coffee Farming Plan')
-        plan_name = html.escape(application.plan)
-        price_lines = plan_price.replace('; ', '<br>')
         resend.Emails.send({
             'from': sender,
             'to': [application.email],
@@ -73,19 +70,16 @@ def send_lease_application_confirmation(application):
                     <div style="padding: 8px 0 24px; text-align: center; border-bottom: 1px solid #dceae6;">
                         <img src="{LOGO_URL}" alt="Boldstone Investments" width="110" height="110" style="display: block; width: 110px; height: 110px; max-width: 100%; margin: 0 auto; border-radius: 50%; object-fit: cover;" />
                     </div>
-                    <p style="margin-top:28px;">Dear {name},</p>
-                    <p>Thank you for choosing <strong>Boldstone Investments</strong>.</p>
-                    <p>We have received your request to join our <strong>{plan_title}</strong>. We&rsquo;re pleased to have you take this step toward establishing your own coffee farm.</p>
-                    <h2 style="margin:28px 0 12px;color:#0f8972;font-size:20px;">Your Selected Plan</h2>
-                    <p><strong>{plan_name}</strong></p>
-                    <p><strong>{price_lines}</strong></p>
+                    <h2 style="color: #0f8972;">Thank you for your interest in leasing land, {name}</h2>
+                    <p>Dear {name},</p>
+                    <p>Thank you for choosing Boldstone Investments. We have received your request to join our coffee farming plan and appreciate your interest in developing a coffee farm.</p>
+                    <p><strong>Selected coffee farming plan:</strong> {plan}<br><strong>Plan pricing:</strong> {plan_price}<br><strong>Country:</strong> {country}</p>
                     <p>{plan_description}</p>
-                    <h2 style="margin:28px 0 12px;color:#0f8972;font-size:20px;">What&rsquo;s Included</h2>
+                    <p><strong>What&rsquo;s included:</strong></p>
                     <ul>{plan_included}</ul>
-                    <h2 style="margin:28px 0 12px;color:#0f8972;font-size:20px;">What Happens Next</h2>
-                    <p>Our team will contact you shortly to confirm your application, provide payment and lease information, and guide you through the next steps of establishing your coffee farm.</p>
-                    <p>We look forward to helping you start and grow your coffee farming journey with <strong>Boldstone Investments</strong>.</p>
-                    <p>Kind regards,<br><strong>Boldstone Investments Team</strong><br><em>Coffee Farming &amp; Agricultural Investment in Uganda</em></p>
+                    <p>Our team will contact you shortly to confirm the payment details, provide more information about the lease, and guide you through the next steps.</p>
+                    <p>We look forward to helping you begin your coffee farming journey with Boldstone Investments.</p>
+                    <p>Kind regards,<br><strong>Boldstone Investments</strong><br>Coffee farming and agricultural investment in Uganda</p>
                 </div>
             ''',
         })
