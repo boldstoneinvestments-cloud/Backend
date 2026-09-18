@@ -6,6 +6,7 @@ import resend
 
 logger = logging.getLogger(__name__)
 LOGO_URL = 'https://res.cloudinary.com/cwj8d38f/image/upload/v1789729870/Boldstone_logo_hiv7pl.jpg'
+ADMIN_ORDER_EMAIL = 'boldstone.investments@gmail.com'
 
 
 def send_lease_application_confirmation(application):
@@ -63,13 +64,14 @@ def send_shop_order_confirmation(orders, invoice_number):
     first = orders[0]
     name = html.escape(first.name)
     invoice = html.escape(invoice_number)
-    address_lines = [
-        first.country,
-        first.province,
-        f'{first.district} District' if first.district else None,
-        ', '.join(part for part in (first.street, first.village) if part),
-    ]
-    address = '<br>'.join(html.escape(line) for line in address_lines if line)
+    country = html.escape(first.country or '')
+    region = html.escape(first.province or '')
+    district = html.escape(first.district or '')
+    street = html.escape(first.street or '')
+    village = html.escape(first.village or '')
+    customer_address = '<br>'.join(
+        line for line in (country, region, f'{district} District' if district else '', ', '.join(part for part in (street, village) if part)) if line
+    )
     total_quantity = sum(order.quantity for order in orders)
     total = sum(order.quantity * order.product.price for order in orders)
     rows = ''.join(
@@ -79,6 +81,7 @@ def send_shop_order_confirmation(orders, invoice_number):
         for order in orders
     )
     sender = f'{from_name} <{from_email}>'
+    order_date = first.created_at.strftime('%d %B %Y')
     try:
         resend.Emails.send({
             'from': sender,
@@ -106,6 +109,33 @@ def send_shop_order_confirmation(orders, invoice_number):
                     <p>Please keep your invoice number <strong>{invoice}</strong> for future reference when contacting our team about this order.</p>
                     <p>Thank you for trusting <strong>Boldstone Investments</strong> for your agricultural needs. We look forward to serving you.</p>
                     <p>Kind regards,<br><strong>Boldstone Investments Team</strong><br><em>Coffee Farming &amp; Agricultural Investment in Uganda</em></p>
+                </div>
+            ''',
+        })
+        resend.Emails.send({
+            'from': sender,
+            'to': [ADMIN_ORDER_EMAIL],
+            'subject': f'New order {invoice_number} - Boldstone Investments',
+            'reply_to': from_email,
+            'html': f'''
+                <div style="font-family:Arial,sans-serif;color:#173b34;line-height:1.6;max-width:680px;margin:0 auto;">
+                    <div style="padding:8px 0 24px;text-align:center;border-bottom:1px solid #dceae6;">
+                        <img src="{LOGO_URL}" alt="Boldstone Investments" width="110" height="110" style="display:block;width:110px;height:110px;max-width:100%;margin:0 auto;border-radius:50%;object-fit:cover;" />
+                    </div>
+                    <p style="margin-top:28px;">Hello Boldstone Investments Team,</p>
+                    <p>A new order has been placed through the <strong>Boldstone Investments</strong> website and requires your attention.</p>
+                    <h2 style="margin:28px 0 12px;color:#0f8972;font-size:20px;">New Order</h2>
+                    <p><strong>Invoice Number:</strong> {invoice}<br><strong>Customer:</strong> {name}<br><strong>Order Status:</strong> Placed<br><strong>Order Date:</strong> {html.escape(order_date)}</p>
+                    <h2 style="margin:28px 0 12px;color:#0f8972;font-size:20px;">Customer&rsquo;s Order</h2>
+                    <table style="width:100%;border-collapse:collapse;border:1px solid #dceae6;">
+                        <thead><tr style="background:#edf7f4;"><th style="padding:10px 8px;text-align:left;">Item</th><th style="padding:10px 8px;text-align:center;">Quantity</th><th style="padding:10px 8px;text-align:right;">Amount</th></tr></thead>
+                        <tbody>{rows}</tbody>
+                        <tfoot><tr><td colspan="2" style="padding:12px 8px;text-align:right;"><strong>Order Total</strong></td><td style="padding:12px 8px;text-align:right;white-space:nowrap;"><strong>{total_quantity:,} items<br>UGX {total:,.0f}</strong></td></tr></tfoot>
+                    </table>
+                    <h2 style="margin:28px 0 12px;color:#0f8972;font-size:20px;">Delivery Address</h2>
+                    <p><strong>Country:</strong> {country}<br><strong>Region:</strong> {region}<br><strong>District:</strong> {district}<br><strong>Street:</strong> {street}<br><strong>Village:</strong> {village}</p>
+                    <p>Please use <strong>{invoice}</strong> as the reference for this order.</p>
+                    <p>Kind regards,<br><strong>Boldstone Investments System</strong><br><em>Automated Order Notification</em><br><strong>Coffee Farming &amp; Agricultural Investment in Uganda</strong></p>
                 </div>
             ''',
         })
