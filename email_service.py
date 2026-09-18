@@ -24,6 +24,40 @@ def send_lease_application_confirmation(application):
     country = html.escape(application.country)
     address = html.escape(application.address or '')
     phone = html.escape(application.phone or '')
+    plan_details = {
+        'Starter Plan': {
+            'price': 'US$49.99/month for the 1st year; renews at US$19.99/month',
+            'description': 'Ideal for individuals, young professionals, and first-time coffee farmers who want to start with a manageable monthly commitment. You do not have to be Ugandan to subscribe.',
+            'included': [
+                'Annual lease of 1 acre of coffee farmland',
+                'Land preparation and site establishment',
+                'High-quality coffee seedlings',
+                'Indigenous shade tree seedlings',
+                'Planting and field layout',
+                'Farm maintenance during establishment',
+                'Agronomy supervision and technical support',
+                'Progress updates and farm records',
+                'Harvest preparation support',
+            ],
+        },
+        'Growth Plan': {
+            'price': 'US$569.99/year for the 1st year; renews at US$219.99/year',
+            'description': 'Ideal for individuals, businesses, people in the diaspora, and clients with available capital who want their coffee farm established without waiting for a phased setup period.',
+            'included': [
+                'Annual lease of 1 acre of coffee farmland',
+                'Land preparation and farm establishment',
+                'High-quality coffee seedlings',
+                'Planting and field layout',
+                'Ongoing farm maintenance',
+                'Agronomy supervision and technical support',
+                'Periodic farm reports and production updates',
+                'Harvest planning and coordination support',
+            ],
+        },
+    }.get(application.plan, {'price': '', 'description': '', 'included': []})
+    plan_price = html.escape(plan_details['price'])
+    plan_description = html.escape(plan_details['description'])
+    plan_included = ''.join(f'<li>{html.escape(item)}</li>' for item in plan_details['included'])
     sender = f'{from_name} <{from_email}>'
 
     try:
@@ -39,8 +73,11 @@ def send_lease_application_confirmation(application):
                     </div>
                     <h2 style="color: #0f8972;">Thank you for your interest in leasing land, {name}</h2>
                     <p>Dear {name},</p>
-                    <p>Thank you for choosing Boldstone Investments. We have received your request to lease land with us and appreciate your interest in developing a coffee farm.</p>
-                    <p><strong>Selected plan:</strong> {plan}<br><strong>Country:</strong> {country}</p>
+                    <p>Thank you for choosing Boldstone Investments. We have received your request to join our coffee farming plan and appreciate your interest in developing a coffee farm.</p>
+                    <p><strong>Selected coffee farming plan:</strong> {plan}<br><strong>Plan pricing:</strong> {plan_price}<br><strong>Country:</strong> {country}</p>
+                    <p>{plan_description}</p>
+                    <p><strong>What&rsquo;s included:</strong></p>
+                    <ul>{plan_included}</ul>
                     <p>Our team will contact you shortly to confirm the payment details, provide more information about the lease, and guide you through the next steps.</p>
                     <p>We look forward to helping you begin your coffee farming journey with Boldstone Investments.</p>
                     <p>Kind regards,<br><strong>Boldstone Investments</strong><br>Coffee farming and agricultural investment in Uganda</p>
@@ -60,7 +97,10 @@ def send_lease_application_confirmation(application):
                     <p style="margin-top:28px;">Hello Boldstone Investments Team,</p>
                     <p>A new lease request has been submitted through the <strong>Boldstone Investments</strong> website.</p>
                     <h2 style="margin:28px 0 12px;color:#0f8972;font-size:20px;">Lease Request</h2>
-                    <p><strong>Customer:</strong> {name}<br><strong>Plan:</strong> {plan}<br><strong>Status:</strong> Submitted<br><strong>Country:</strong> {country}<br><strong>Phone:</strong> {phone}<br><strong>Email:</strong> {html.escape(application.email)}</p>
+                    <p><strong>Customer:</strong> {name}<br><strong>Plan:</strong> {plan}<br><strong>Plan pricing:</strong> {plan_price}<br><strong>Status:</strong> Submitted<br><strong>Country:</strong> {country}<br><strong>Phone:</strong> {phone}<br><strong>Email:</strong> {html.escape(application.email)}</p>
+                    <p><strong>Plan description:</strong> {plan_description}</p>
+                    <p><strong>What&rsquo;s included:</strong></p>
+                    <ul>{plan_included}</ul>
                     <p><strong>Address:</strong> {address or 'Not provided'}<br><strong>Notes:</strong> {html.escape(application.notes or 'None')}</p>
                     <p>Please contact the customer to confirm payment details and provide more information about the land lease.</p>
                     <p>Kind regards,<br><strong>Boldstone Investments System</strong><br><em>Automated Lease Notification</em><br><strong>Coffee Farming &amp; Agricultural Investment in Uganda</strong></p>
