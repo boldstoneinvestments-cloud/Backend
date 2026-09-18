@@ -98,7 +98,7 @@ def send_shop_order_confirmation(orders, invoice_number):
                     <p>We&rsquo;re pleased to confirm that we have received your order for coffee and tree seedlings. Our team will contact you shortly to confirm your order details and arrange delivery.</p>
                     <h2 style="margin:28px 0 12px;color:#0f8972;font-size:20px;">Order Details</h2>
                     <p><strong>Invoice Number:</strong> {invoice}</p>
-                    <p><strong>Delivery Address:</strong><br>{address}</p>
+                    <p><strong>Delivery Address:</strong><br>{customer_address}</p>
                     <h2 style="margin:28px 0 12px;color:#0f8972;font-size:20px;">Items Ordered</h2>
                     <table style="width:100%;border-collapse:collapse;border:1px solid #dceae6;">
                         <thead><tr style="background:#edf7f4;"><th style="padding:10px 8px;text-align:left;">Item</th><th style="padding:10px 8px;text-align:center;">Quantity</th><th style="padding:10px 8px;text-align:right;">Amount</th></tr></thead>
