@@ -42,7 +42,7 @@ def create_admin(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ('api', '0001_initial'),
-        ('auth', '0012_update_proxy_permissions'),
+        ('auth', '0012_alter_user_first_name_max_length'),
     ]
 
     operations = [migrations.RunPython(create_admin, migrations.RunPython.noop)]
