@@ -62,22 +62,20 @@ def send_shop_order_confirmation(orders, invoice_number):
     resend.api_key = api_key
     first = orders[0]
     name = html.escape(first.name)
-    order_items = ', '.join(
-        f'{order.quantity} x {html.escape(order.product_name)}' for order in orders
-    )
-    address_parts = [
-        f'Country: {first.country}' if first.country else None,
-        f'Province/Region: {first.province}' if first.province else None,
-        f'District: {first.district}' if first.district else None,
-        f'Street: {first.street}' if first.street else None,
-        f'Village: {first.village}' if first.village else None,
+    invoice = html.escape(invoice_number)
+    address_lines = [
+        first.country,
+        first.province,
+        f'{first.district} District' if first.district else None,
+        ', '.join(part for part in (first.street, first.village) if part),
     ]
-    address = ', '.join(part for part in address_parts if part)
+    address = '<br>'.join(html.escape(line) for line in address_lines if line)
+    total_quantity = sum(order.quantity for order in orders)
     total = sum(order.quantity * order.product.price for order in orders)
     rows = ''.join(
-        f'<tr><td style="padding:8px;border-bottom:1px solid #dceae6;">{html.escape(order.product_name)}</td>'
-        f'<td style="padding:8px;border-bottom:1px solid #dceae6;text-align:center;">{order.quantity}</td>'
-        f'<td style="padding:8px;border-bottom:1px solid #dceae6;text-align:right;">UGX {order.quantity * order.product.price:,.0f}</td></tr>'
+        f'<tr><td style="padding:10px 8px;border-bottom:1px solid #dceae6;">{html.escape(order.product_name)}</td>'
+        f'<td style="padding:10px 8px;border-bottom:1px solid #dceae6;text-align:center;">{order.quantity:,}</td>'
+        f'<td style="padding:10px 8px;border-bottom:1px solid #dceae6;text-align:right;white-space:nowrap;">UGX {order.quantity * order.product.price:,.0f}</td></tr>'
         for order in orders
     )
     sender = f'{from_name} <{from_email}>'
@@ -88,15 +86,26 @@ def send_shop_order_confirmation(orders, invoice_number):
             'subject': f'Order confirmation {invoice_number} - Boldstone Investments',
             'reply_to': from_email,
             'html': f'''
-                <div style="font-family:Arial,sans-serif;color:#173b34;line-height:1.6;max-width:680px;">
+                <div style="font-family:Arial,sans-serif;color:#173b34;line-height:1.6;max-width:680px;margin:0 auto;">
                     <div style="padding:8px 0 24px;text-align:center;border-bottom:1px solid #dceae6;">
                         <img src="{LOGO_URL}" alt="Boldstone Investments" width="110" height="110" style="display:block;width:110px;height:110px;max-width:100%;margin:0 auto;border-radius:50%;object-fit:cover;" />
                     </div>
-                    <h2 style="color:#0f8972;">Thank you for your order, {name}</h2>
-                    <p>Thank you for ordering {order_items} from Boldstone Investments. We have received your order and our team will contact you soon to confirm delivery.</p>
-                    <p><strong>Invoice number:</strong> {invoice_number}<br><strong>Delivery address:</strong> {address}</p>
-                    <table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:8px;">Item</th><th style="padding:8px;">Qty</th><th style="text-align:right;padding:8px;">Amount</th></tr></thead><tbody>{rows}</tbody><tfoot><tr><td colspan="2" style="padding:12px 8px;text-align:right;"><strong>Total</strong></td><td style="padding:12px 8px;text-align:right;"><strong>UGX {total:,.0f}</strong></td></tr></tfoot></table>
-                    <p>Kind regards,<br><strong>Boldstone Investments Team</strong><br>Coffee farming and agricultural investment in Uganda</p>
+                    <p style="margin-top:28px;">Dear {name},</p>
+                    <p>Thank you for choosing <strong>Boldstone Investments</strong>.</p>
+                    <p>We&rsquo;re pleased to confirm that we have received your order for coffee and tree seedlings. Our team will contact you shortly to confirm your order details and arrange delivery.</p>
+                    <h2 style="margin:28px 0 12px;color:#0f8972;font-size:20px;">Order Details</h2>
+                    <p><strong>Invoice Number:</strong> {invoice}</p>
+                    <p><strong>Delivery Address:</strong><br>{address}</p>
+                    <h2 style="margin:28px 0 12px;color:#0f8972;font-size:20px;">Items Ordered</h2>
+                    <table style="width:100%;border-collapse:collapse;border:1px solid #dceae6;">
+                        <thead><tr style="background:#edf7f4;"><th style="padding:10px 8px;text-align:left;">Item</th><th style="padding:10px 8px;text-align:center;">Quantity</th><th style="padding:10px 8px;text-align:right;">Amount</th></tr></thead>
+                        <tbody>{rows}</tbody>
+                        <tfoot><tr><td colspan="2" style="padding:12px 8px;text-align:right;"><strong>Total</strong></td><td style="padding:12px 8px;text-align:right;white-space:nowrap;"><strong>{total_quantity:,} items<br>UGX {total:,.0f}</strong></td></tr></tfoot>
+                    </table>
+                    <p><strong>Order Status:</strong> Received</p>
+                    <p>Please keep your invoice number <strong>{invoice}</strong> for future reference when contacting our team about this order.</p>
+                    <p>Thank you for trusting <strong>Boldstone Investments</strong> for your agricultural needs. We look forward to serving you.</p>
+                    <p>Kind regards,<br><strong>Boldstone Investments Team</strong><br><em>Coffee Farming &amp; Agricultural Investment in Uganda</em></p>
                 </div>
             ''',
         })

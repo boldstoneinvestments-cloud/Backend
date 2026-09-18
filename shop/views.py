@@ -54,6 +54,41 @@ def orders(request):
         for item in items:
             product_id = item.get('id')
             product_name = item.get('productName', '')
+            selections = item.get('selections')
+
+            # Handle merged 'seedlings' cart entry — split by variety type
+            if product_id == 'seedlings' and isinstance(selections, list):
+                ARABICA_VARIETIES = {'SL14','SL28','SL34','Ruiru 11','Batian','CIFC 635','K7','Blue Mountain','Nyasaland'}
+                arabica_lines = [s for s in selections if s.get('variety') in ARABICA_VARIETIES]
+                robusta_lines = [s for s in selections if s.get('variety') not in ARABICA_VARIETIES]
+                sub_items = []
+                if arabica_lines:
+                    sub_items.append({'id': 'arabica', 'productName': 'Arabica Seedlings', 'selections': arabica_lines})
+                if robusta_lines:
+                    sub_items.append({'id': 'robusta', 'productName': 'Robusta Seedlings', 'selections': robusta_lines})
+                for sub in sub_items:
+                    product = Product.objects.filter(id=sub['id'], active=True).first()
+                    if product is None:
+                        return JsonResponse({'error': f'Product not found: {sub["productName"]}'}, status=404)
+                    for line in sub['selections']:
+                        try:
+                            quantity = int(line.get('qty', 0))
+                        except (TypeError, ValueError):
+                            quantity = 0
+                        if quantity < 1:
+                            continue
+                        variety = line.get('variety')
+                        order = ShopOrder.objects.create(
+                            invoice_number=invoice_number, name=data['name'], phone=data['phone'], email=data['email'], product=product,
+                            product_name=f'{product.name} — {variety}' if variety else product.name,
+                            quantity=quantity, location=data['location'],
+                            country=data['country'], province=data['province'], district=data['district'],
+                            street=data.get('street', ''), village=data.get('village', ''),
+                            notes=data.get('notes', ''),
+                        )
+                        order_ids.append(order.id)
+                continue
+
             product = Product.objects.filter(id=product_id, active=True).first()
             if product is None:
                 product = Product.objects.filter(name=product_name, active=True).first()
