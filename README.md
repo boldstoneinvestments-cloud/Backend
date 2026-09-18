@@ -15,3 +15,7 @@ API endpoints: `GET /api/health`, `GET /api/estate`, `POST /api/estate/invest`, 
 ## Railway
 
 Create a Railway service from this repository with the service root directory set to `backend`. Railway will use `railway.toml` to run migrations and start Gunicorn. Set `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS` in the Railway service variables.
+
+### One-time database reset
+
+For a full PostgreSQL reset without service-terminal access, add a Railway variable named `DATABASE_RESET_KEY` with a new random value and redeploy. The startup command resets the `public` schema once for that key, then runs migrations. Keep the variable set afterward; the same key will not reset the database again. Change the key only when you intentionally want another full reset.
