@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import ContactMessage, Lease, Order
+from .models import ContactMessage, Lease, LeaseApplication, Order
+
+
+@admin.register(LeaseApplication)
+class LeaseApplicationAdmin(admin.ModelAdmin):
+    list_display = ('full_name', 'email', 'phone', 'plan', 'status', 'created_at')
+    list_filter = ('status', 'plan', 'created_at')
+    search_fields = ('full_name', 'email', 'phone', 'country', 'plan')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(Order)
