@@ -4,6 +4,7 @@ from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import ContactMessage, Lease, LeaseApplication, Order
+from email import send_lease_application_confirmation
 
 ESTATE = {
     'name': 'Kyenjojo Coffee Estate',
@@ -85,4 +86,5 @@ def lease_applications(request):
         country=data['country'], address=data.get('address', ''), plan=data['plan'],
         notes=data.get('notes', ''),
     )
+    send_lease_application_confirmation(application)
     return JsonResponse({'success': True, 'applicationId': application.id}, status=201)
