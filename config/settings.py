@@ -9,10 +9,38 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'local-development-only')
 DEBUG = os.getenv('DJANGO_DEBUG', '1') == '1'
 ALLOWED_HOSTS = [host for host in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,.railway.app').split(',') if host]
 
-INSTALLED_APPS = ['django.contrib.contenttypes', 'django.contrib.auth', 'api', 'shop']
-MIDDLEWARE = ['django.middleware.security.SecurityMiddleware', 'config.cors.CorsMiddleware']
+INSTALLED_APPS = [
+	'django.contrib.admin',
+	'django.contrib.auth',
+	'django.contrib.contenttypes',
+	'django.contrib.sessions',
+	'django.contrib.messages',
+	'django.contrib.staticfiles',
+	'api',
+	'shop',
+]
+MIDDLEWARE = [
+	'django.middleware.security.SecurityMiddleware',
+	'config.cors.CorsMiddleware',
+	'django.contrib.sessions.middleware.SessionMiddleware',
+	'django.middleware.common.CommonMiddleware',
+	'django.middleware.csrf.CsrfViewMiddleware',
+	'django.contrib.auth.middleware.AuthenticationMiddleware',
+	'django.contrib.messages.middleware.MessageMiddleware',
+]
 ROOT_URLCONF = 'config.urls'
-TEMPLATES = []
+TEMPLATES = [{
+	'BACKEND': 'django.template.backends.django.DjangoTemplates',
+	'DIRS': [],
+	'APP_DIRS': True,
+	'OPTIONS': {
+		'context_processors': [
+			'django.template.context_processors.request',
+			'django.contrib.auth.context_processors.auth',
+			'django.contrib.messages.context_processors.messages',
+		],
+	},
+}]
 WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
 	'default': dj_database_url.config(
@@ -33,3 +61,4 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', '1') == '1'
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'webmaster@localhost')
 EMAIL_TO = os.getenv('EMAIL_TO', '')
+STATIC_URL = '/static/'
