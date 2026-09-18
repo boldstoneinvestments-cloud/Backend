@@ -5,6 +5,7 @@ import os
 import resend
 
 logger = logging.getLogger(__name__)
+LOGO_URL = 'https://res.cloudinary.com/cwj8d38f/image/upload/v1789729870/Boldstone_logo_hiv7pl.jpg'
 
 
 def send_lease_application_confirmation(application):
@@ -30,6 +31,9 @@ def send_lease_application_confirmation(application):
             'reply_to': from_email,
             'html': f'''
                 <div style="font-family: Arial, sans-serif; color: #173b34; line-height: 1.6; max-width: 640px;">
+                    <div style="padding: 8px 0 24px; text-align: center; border-bottom: 1px solid #dceae6;">
+                        <img src="{LOGO_URL}" alt="Boldstone Investments" width="220" style="display: block; width: 220px; max-width: 100%; height: auto; margin: 0 auto;" />
+                    </div>
                     <h2 style="color: #0f8972;">Thank you for your application, {name}</h2>
                     <p>Dear {name},</p>
                     <p>Thank you for your interest in leasing land with Boldstone Investments. We have received your application and appreciate the opportunity to learn more about your plans for coffee farming.</p>
