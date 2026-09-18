@@ -18,4 +18,4 @@ Create a Railway service from this repository with the service root directory se
 
 ### One-time database reset
 
-For a full PostgreSQL reset without service-terminal access, add a Railway variable named `DATABASE_RESET_KEY` with a new random value and redeploy. The startup command resets the `public` schema once for that key, then runs migrations. Keep the variable set afterward; the same key will not reset the database again. Change the key only when you intentionally want another full reset.
+For a full PostgreSQL reset without service-terminal access, add a Railway variable named `DATABASE_RESET_KEY` with a new random value and redeploy. This is an optional destructive operation; normal deployments only run migrations and preserve existing data.
