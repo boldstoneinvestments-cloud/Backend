@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 
-from .models import Order
+from .models import LeaseApplication, Order
 from shop.models import ShopOrder
 
 
@@ -66,4 +66,26 @@ def admin_orders(request):
     orders.sort(key=lambda order: order['created_at'], reverse=True)
     return JsonResponse({
         'orders': orders,
+    })
+
+
+@login_required
+def admin_lease_applications(request):
+    applications = LeaseApplication.objects.order_by('-created_at')
+    return JsonResponse({
+        'applications': [
+            {
+                'id': application.id,
+                'created_at': application.created_at.isoformat(),
+                'full_name': application.full_name,
+                'email': application.email,
+                'phone': application.phone,
+                'country': application.country,
+                'address': application.address,
+                'plan': application.plan,
+                'notes': application.notes,
+                'status': application.status,
+            }
+            for application in applications
+        ],
     })

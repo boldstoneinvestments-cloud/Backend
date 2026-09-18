@@ -5,4 +5,5 @@ urlpatterns = [
     path('login', admin_views.login_admin),
     path('logout', admin_views.logout_admin),
     path('orders', admin_views.admin_orders),
+    path('lease-applications', admin_views.admin_lease_applications),
 ]
