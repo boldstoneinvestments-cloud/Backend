@@ -1,8 +1,11 @@
 import json
+from datetime import datetime
+from uuid import uuid4
 from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import Product, ShopOrder
+from email_service import send_shop_order_confirmation
 
 
 def products(request):
@@ -29,7 +32,7 @@ def orders(request):
     except json.JSONDecodeError:
         data = None
 
-    required = ('name', 'phone', 'email', 'location')
+    required = ('name', 'phone', 'email', 'country', 'province', 'district')
     if not data or any(not data.get(field) for field in required):
         return JsonResponse({'error': 'Missing required fields'}, status=400)
 
@@ -41,6 +44,7 @@ def orders(request):
             'qty': data.get('quantity'),
         }]
 
+    invoice_number = f'BS-{datetime.now().strftime("%Y%m%d")}-{uuid4().hex[:6].upper()}'
     order_ids = []
     with transaction.atomic():
         for item in items:
@@ -64,12 +68,16 @@ def orders(request):
                 variety = line.get('variety')
                 line_name = f'{product.name} — {variety}' if variety else product.name
                 order = ShopOrder.objects.create(
-                    name=data['name'], phone=data['phone'], email=data['email'], product=product,
+                    invoice_number=invoice_number, name=data['name'], phone=data['phone'], email=data['email'], product=product,
                     product_name=line_name, quantity=quantity, location=data['location'],
+                    country=data['country'], province=data['province'], district=data['district'],
+                    street=data.get('street', ''), village=data.get('village', ''),
                     notes=data.get('notes', ''),
                 )
                 order_ids.append(order.id)
 
     if not order_ids:
         return JsonResponse({'error': 'Cart quantity must be at least 1'}, status=400)
-    return JsonResponse({'success': True, 'orderIds': order_ids}, status=201)
+    created_orders = list(ShopOrder.objects.filter(id__in=order_ids).select_related('product'))
+    send_shop_order_confirmation(created_orders, invoice_number)
+    return JsonResponse({'success': True, 'orderIds': order_ids, 'invoiceNumber': invoice_number}, status=201)

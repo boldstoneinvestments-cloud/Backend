@@ -24,6 +24,7 @@ class Product(models.Model):
 
 
 class ShopOrder(models.Model):
+    invoice_number = models.CharField(max_length=40, db_index=True)
     name = models.CharField(max_length=200)
     phone = models.CharField(max_length=50)
     email = models.EmailField()
@@ -31,5 +32,10 @@ class ShopOrder(models.Model):
     product_name = models.CharField(max_length=200)
     quantity = models.PositiveIntegerField()
     location = models.CharField(max_length=200)
+    country = models.CharField(max_length=100, default='Uganda')
+    province = models.CharField(max_length=100, blank=True)
+    district = models.CharField(max_length=100, blank=True)
+    street = models.CharField(max_length=200, blank=True)
+    village = models.CharField(max_length=200, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

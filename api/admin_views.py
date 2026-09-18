@@ -39,6 +39,7 @@ def admin_orders(request):
     orders = [
         {
             'id': f'shop-{order.id}',
+            'invoice_number': order.invoice_number,
             'created_at': order.created_at.isoformat(),
             'name': order.name,
             'phone': order.phone,
@@ -52,6 +53,7 @@ def admin_orders(request):
     ] + [
         {
             'id': f'order-{order.id}',
+            'invoice_number': 'Legacy order',
             'created_at': order.created_at.isoformat(),
             'name': order.name,
             'phone': order.phone,
