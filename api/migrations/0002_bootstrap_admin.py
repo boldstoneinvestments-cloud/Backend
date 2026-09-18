@@ -1,5 +1,6 @@
 import os
 
+from django.contrib.auth.hashers import make_password
 from django.db import migrations
 
 
@@ -20,11 +21,11 @@ def create_admin(apps, schema_editor):
         },
     )
     if created:
-        user.set_password(password)
+        user.password = make_password(password)
         user.save(update_fields=['password'])
     else:
         fields = []
-        user.set_password(password)
+        user.password = make_password(password)
         fields.append('password')
         if email and user.email != email:
             user.email = email
