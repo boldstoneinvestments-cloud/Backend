@@ -82,7 +82,6 @@ def google_start(request):
         'scope': 'openid email profile',
         'state': state,
         'access_type': 'online',
-        'prompt': 'select_account',
     })
     from django.shortcuts import redirect
     return redirect(f'https://accounts.google.com/o/oauth2/v2/auth?{query}')
