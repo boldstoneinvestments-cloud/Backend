@@ -9,6 +9,7 @@ from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.core.mail import send_mail
 from django.http import JsonResponse, StreamingHttpResponse
 from django.middleware.csrf import get_token
+from django.core import signing
 from django.views.decorators.csrf import csrf_exempt
 from .models import ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
 from email_service import send_lease_application_confirmation
@@ -53,8 +54,7 @@ def google_start(request):
     redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', '').strip()
     if not client_id or not redirect_uri:
         return JsonResponse({'error': 'Google sign-in is not configured'}, status=503)
-    state = secrets.token_urlsafe(32)
-    request.session['google_oauth_state'] = state
+    state = signing.dumps({'nonce': secrets.token_urlsafe(32)}, salt='google-oauth-state')
     query = urlencode({
         'client_id': client_id,
         'redirect_uri': redirect_uri,
@@ -73,7 +73,9 @@ def google_callback(request):
     frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173').strip().rstrip('/')
     if request.GET.get('error'):
         return redirect(f'{frontend_url}/account/sign-in?error=google_cancelled')
-    if not secrets.compare_digest(request.session.pop('google_oauth_state', ''), request.GET.get('state', '')):
+    try:
+        signing.loads(request.GET.get('state', ''), salt='google-oauth-state', max_age=600)
+    except signing.BadSignature:
         return JsonResponse({'error': 'Invalid Google OAuth state'}, status=400)
 
     client_id = os.getenv('GOOGLE_CLIENT_ID', '').strip()
