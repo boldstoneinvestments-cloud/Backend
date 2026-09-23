@@ -10,7 +10,6 @@ urlpatterns = [
     path('account/csrf', views.account_csrf),
     path('account/google/start', views.google_start),
     path('account/google/callback', views.google_callback),
-    path('account/google/token', views.google_token),
     path('estate', views.estate),
     path('estate/invest', views.invest),
     path('orders', views.orders),
