@@ -11,6 +11,7 @@ from django.core.mail import send_mail
 from django.http import JsonResponse, StreamingHttpResponse
 from django.middleware.csrf import get_token
 from django.core import signing
+from django.db import connection
 from django.views.decorators.csrf import csrf_exempt
 from .models import ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
 from email_service import send_lease_application_confirmation
@@ -62,6 +63,11 @@ def body(request):
 
 
 def health(request):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1')
+    except Exception:
+        return JsonResponse({'status': 'database_unavailable'}, status=503)
     return JsonResponse({'status': 'ok'})
 
 

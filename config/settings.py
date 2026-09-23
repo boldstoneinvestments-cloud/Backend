@@ -46,10 +46,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
 	'default': dj_database_url.config(
 		default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
-		conn_max_age=600,
+		conn_max_age=60,
+		conn_health_checks=True,
 		ssl_require=os.getenv('DATABASE_SSL_REQUIRE', '0') == '1',
 	)
 }
+if DATABASES['default']['ENGINE'].endswith('postgresql'):
+	DATABASES['default'].setdefault('OPTIONS', {})['connect_timeout'] = 5
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 USE_TZ = True
 LANGUAGE_CODE = 'en-us'
