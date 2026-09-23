@@ -5,7 +5,7 @@ from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
 from django.http import JsonResponse, StreamingHttpResponse
-from django.views.decorators.csrf import csrf_exempt
+from django.middleware.csrf import get_token
 from .models import ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
 from email_service import send_lease_application_confirmation
 
@@ -32,12 +32,15 @@ def health(request):
     return JsonResponse({'status': 'ok'})
 
 
+def account_csrf(request):
+    return JsonResponse({'csrfToken': get_token(request)})
+
+
 def serialize_account(user):
     profile, _ = CustomerProfile.objects.get_or_create(user=user)
     return {'id': str(profile.public_id), 'name': user.get_full_name(), 'email': user.email}
 
 
-@csrf_exempt
 def account_signup(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -52,11 +55,11 @@ def account_signup(request):
     first_name, _, last_name = name.partition(' ')
     user = User.objects.create_user(username=email, email=email, password=password, first_name=first_name, last_name=last_name)
     CustomerProfile.objects.create(user=user)
+    ChatMessage.objects.filter(user__isnull=True, email__iexact=email).update(user=user)
     login(request, user)
     return JsonResponse({'user': serialize_account(user)}, status=201)
 
 
-@csrf_exempt
 def account_login(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -77,7 +80,6 @@ def account_me(request):
     return JsonResponse({'user': serialize_account(request.user)})
 
 
-@csrf_exempt
 @login_required
 def account_logout(request):
     logout(request)
@@ -131,7 +133,6 @@ def contact(request):
     return JsonResponse({'success': True})
 
 
-@csrf_exempt
 def chat(request):
     if request.user.is_anonymous or request.user.is_staff:
         return JsonResponse({'error': 'Sign in required'}, status=401)
