@@ -2,7 +2,6 @@ import json
 import time
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login, logout
-from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
 from django.http import JsonResponse, StreamingHttpResponse
 from django.middleware.csrf import get_token
@@ -20,6 +19,14 @@ ESTATE = {
     'TOTAL_ACRES': 3000,
 }
 User = get_user_model()
+
+
+def customer_required(view):
+    def wrapped(request, *args, **kwargs):
+        if request.user.is_anonymous or request.user.is_staff:
+            return JsonResponse({'error': 'Sign in required'}, status=401)
+        return view(request, *args, **kwargs)
+    return wrapped
 
 
 def body(request):
@@ -74,14 +81,12 @@ def account_login(request):
     return JsonResponse({'user': serialize_account(user)})
 
 
-@login_required
+@customer_required
 def account_me(request):
-    if request.user.is_staff:
-        return JsonResponse({'error': 'Customer account required'}, status=403)
     return JsonResponse({'user': serialize_account(request.user)})
 
 
-@login_required
+@customer_required
 def account_logout(request):
     logout(request)
     return JsonResponse({'success': True})
@@ -164,10 +169,8 @@ def chat(request):
     }})
 
 
-@login_required
+@customer_required
 def chat_stream(request):
-    if request.user.is_staff:
-        return JsonResponse({'error': 'Customer account required'}, status=403)
     try:
         last_id = int(request.GET.get('last_id', 0))
     except (TypeError, ValueError):
