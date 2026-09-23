@@ -1,5 +1,9 @@
 import json
+import os
 import time
+import secrets
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.core.mail import send_mail
@@ -42,6 +46,65 @@ def health(request):
 
 def account_csrf(request):
     return JsonResponse({'csrfToken': get_token(request)})
+
+
+def google_start(request):
+    client_id = os.getenv('GOOGLE_CLIENT_ID', '').strip()
+    redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', '').strip()
+    if not client_id or not redirect_uri:
+        return JsonResponse({'error': 'Google sign-in is not configured'}, status=503)
+    state = secrets.token_urlsafe(32)
+    request.session['google_oauth_state'] = state
+    query = urlencode({
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'state': state,
+        'access_type': 'online',
+        'prompt': 'select_account',
+    })
+    from django.shortcuts import redirect
+    return redirect(f'https://accounts.google.com/o/oauth2/v2/auth?{query}')
+
+
+def google_callback(request):
+    from django.shortcuts import redirect
+    frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173').strip().rstrip('/')
+    if request.GET.get('error'):
+        return redirect(f'{frontend_url}/account/sign-in?error=google_cancelled')
+    if not secrets.compare_digest(request.session.pop('google_oauth_state', ''), request.GET.get('state', '')):
+        return JsonResponse({'error': 'Invalid Google OAuth state'}, status=400)
+
+    client_id = os.getenv('GOOGLE_CLIENT_ID', '').strip()
+    client_secret = os.getenv('GOOGLE_CLIENT_SECRET', '').strip()
+    redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', '').strip()
+    try:
+        token_request = Request('https://oauth2.googleapis.com/token', data=urlencode({
+            'code': request.GET.get('code', ''), 'client_id': client_id,
+            'client_secret': client_secret, 'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code',
+        }).encode(), headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        with urlopen(token_request, timeout=10) as response:
+            token_data = json.loads(response.read())
+        profile_request = Request('https://openidconnect.googleapis.com/v1/userinfo', headers={
+            'Authorization': f"Bearer {token_data['access_token']}"
+        })
+        with urlopen(profile_request, timeout=10) as response:
+            profile = json.loads(response.read())
+        email = str(profile.get('email', '')).strip().lower()
+        if not email or not profile.get('email_verified'):
+            raise ValueError('Google email is not verified')
+    except Exception:
+        return redirect(f'{frontend_url}/account/sign-in?error=google_failed')
+
+    user = User.objects.filter(email__iexact=email, is_staff=False).first()
+    if user is None:
+        user = User.objects.create_user(username=email, email=email, first_name=profile.get('given_name', ''), last_name=profile.get('family_name', ''))
+    CustomerProfile.objects.get_or_create(user=user)
+    ChatMessage.objects.filter(user__isnull=True, email__iexact=email).update(user=user)
+    login(request, user)
+    return redirect(frontend_url)
 
 
 def serialize_account(user):

@@ -8,6 +8,8 @@ urlpatterns = [
     path('account/me', views.account_me),
     path('account/sign-out', views.account_logout),
     path('account/csrf', views.account_csrf),
+    path('account/google/start', views.google_start),
+    path('account/google/callback', views.google_callback),
     path('estate', views.estate),
     path('estate/invest', views.invest),
     path('orders', views.orders),
