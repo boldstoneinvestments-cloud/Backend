@@ -106,12 +106,15 @@ def google_callback(request):
             'client_secret': client_secret, 'redirect_uri': redirect_uri,
             'grant_type': 'authorization_code',
         }).encode(), headers={'Content-Type': 'application/x-www-form-urlencoded'})
-        with urlopen(token_request, timeout=10) as response:
+        with urlopen(token_request, timeout=8) as response:
             token_data = json.loads(response.read())
+        access_token = token_data.get('access_token')
+        if not access_token:
+            raise ValueError('Google did not return an access token')
         profile_request = Request('https://openidconnect.googleapis.com/v1/userinfo', headers={
-            'Authorization': f"Bearer {token_data['access_token']}"
+            'Authorization': f'Bearer {access_token}'
         })
-        with urlopen(profile_request, timeout=10) as response:
+        with urlopen(profile_request, timeout=8) as response:
             profile = json.loads(response.read())
         email = str(profile.get('email', '')).strip().lower()
         if not email or not profile.get('email_verified'):
