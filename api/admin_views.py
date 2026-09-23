@@ -257,7 +257,10 @@ def admin_chat_reply(request):
     if not name or not email or not message:
         return JsonResponse({'error': 'Name, email, and message are required'}, status=400)
 
-    reply = ChatMessage.objects.create(name=name, email=email, message=message, is_admin=True)
+    customer = User.objects.filter(email__iexact=email, is_staff=False).first()
+    if customer is None:
+        return JsonResponse({'error': 'Customer account not found'}, status=404)
+    reply = ChatMessage.objects.create(user=customer, name=customer.get_full_name(), email=customer.email, message=message, is_admin=True)
     return JsonResponse({
         'success': True,
         'message': {

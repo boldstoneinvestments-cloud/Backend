@@ -1,9 +1,12 @@
 import json
+import time
 from django.conf import settings
+from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import ChatMessage, ContactMessage, Lease, LeaseApplication, Order
+from .models import ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
 from email_service import send_lease_application_confirmation
 
 ESTATE = {
@@ -15,6 +18,7 @@ ESTATE = {
     'coordinates': {'lat': 0.6167, 'lng': 30.6167},
     'TOTAL_ACRES': 3000,
 }
+User = get_user_model()
 
 
 def body(request):
@@ -26,6 +30,58 @@ def body(request):
 
 def health(request):
     return JsonResponse({'status': 'ok'})
+
+
+def serialize_account(user):
+    profile, _ = CustomerProfile.objects.get_or_create(user=user)
+    return {'id': str(profile.public_id), 'name': user.get_full_name(), 'email': user.email}
+
+
+@csrf_exempt
+def account_signup(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    data = body(request) or {}
+    name = str(data.get('name', '')).strip()
+    email = str(data.get('email', '')).strip().lower()
+    password = str(data.get('password', ''))
+    if not name or not email or len(password) < 8:
+        return JsonResponse({'error': 'Name, email, and a password of at least 8 characters are required'}, status=400)
+    if User.objects.filter(email__iexact=email).exists():
+        return JsonResponse({'error': 'An account with that email already exists'}, status=409)
+    first_name, _, last_name = name.partition(' ')
+    user = User.objects.create_user(username=email, email=email, password=password, first_name=first_name, last_name=last_name)
+    CustomerProfile.objects.create(user=user)
+    login(request, user)
+    return JsonResponse({'user': serialize_account(user)}, status=201)
+
+
+@csrf_exempt
+def account_login(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    data = body(request) or {}
+    email = str(data.get('email', '')).strip().lower()
+    user = User.objects.filter(email__iexact=email, is_staff=False, is_active=True).first()
+    user = authenticate(username=user.username, password=data.get('password', '')) if user else None
+    if user is None:
+        return JsonResponse({'error': 'Invalid email or password'}, status=401)
+    login(request, user)
+    return JsonResponse({'user': serialize_account(user)})
+
+
+@login_required
+def account_me(request):
+    if request.user.is_staff:
+        return JsonResponse({'error': 'Customer account required'}, status=403)
+    return JsonResponse({'user': serialize_account(request.user)})
+
+
+@csrf_exempt
+@login_required
+def account_logout(request):
+    logout(request)
+    return JsonResponse({'success': True})
 
 
 def estate(request):
@@ -77,11 +133,10 @@ def contact(request):
 
 @csrf_exempt
 def chat(request):
+    if request.user.is_anonymous or request.user.is_staff:
+        return JsonResponse({'error': 'Sign in required'}, status=401)
     data = body(request)
     if request.method == 'GET':
-        email = str(request.GET.get('email', '')).strip()
-        if not email:
-            return JsonResponse({'error': 'Email is required'}, status=400)
         return JsonResponse({
             'messages': [
                 {
@@ -90,18 +145,47 @@ def chat(request):
                     'is_admin': message.is_admin,
                     'created_at': message.created_at.isoformat(),
                 }
-                for message in ChatMessage.objects.filter(email__iexact=email).order_by('created_at')
+                for message in ChatMessage.objects.filter(user=request.user).order_by('created_at')
             ],
         })
 
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    if not data or not data.get('name') or not data.get('email') or not data.get('message'):
+    if not data or not data.get('message'):
         return JsonResponse({'error': 'Missing required fields'}, status=400)
-    msg = ChatMessage.objects.create(name=data['name'], email=data['email'], message=data['message'], is_admin=False)
+    msg = ChatMessage.objects.create(user=request.user, name=request.user.get_full_name(), email=request.user.email, message=data['message'], is_admin=False)
     from email_service import send_chat_notification
     send_chat_notification(msg)
-    return JsonResponse({'success': True})
+    return JsonResponse({'success': True, 'message': {
+        'id': msg.id, 'message': msg.message, 'is_admin': False,
+        'created_at': msg.created_at.isoformat(),
+    }})
+
+
+@login_required
+def chat_stream(request):
+    if request.user.is_staff:
+        return JsonResponse({'error': 'Customer account required'}, status=403)
+    try:
+        last_id = int(request.GET.get('last_id', 0))
+    except (TypeError, ValueError):
+        last_id = 0
+
+    def events():
+        deadline = time.monotonic() + 25
+        while time.monotonic() < deadline:
+            messages = ChatMessage.objects.filter(user=request.user, id__gt=last_id).order_by('id')
+            if messages.exists():
+                for message in messages:
+                    yield f"data: {json.dumps({'id': message.id, 'message': message.message, 'is_admin': message.is_admin, 'created_at': message.created_at.isoformat()})}\n\n"
+                return
+            yield ': keep-alive\n\n'
+            time.sleep(2)
+
+    response = StreamingHttpResponse(events(), content_type='text/event-stream')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    return response
 
 
 @csrf_exempt
