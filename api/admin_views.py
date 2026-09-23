@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 
-from .models import LeaseApplication, Order
+from .models import ChatMessage, LeaseApplication, Order
 from shop.models import ShopOrder
 
 User = get_user_model()
@@ -215,6 +215,26 @@ def admin_lease_applications(request):
                 'status': application.status,
             }
             for application in applications
+        ],
+    })
+
+
+@login_required
+def admin_chat_messages(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    messages = ChatMessage.objects.order_by('-created_at')
+    return JsonResponse({
+        'messages': [
+            {
+                'id': message.id,
+                'name': message.name,
+                'email': message.email,
+                'message': message.message,
+                'created_at': message.created_at.isoformat(),
+            }
+            for message in messages
         ],
     })
 

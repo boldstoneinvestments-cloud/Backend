@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import ContactMessage, Lease, LeaseApplication, Order
+from .models import ChatMessage, ContactMessage, Lease, LeaseApplication, Order
 from email_service import send_lease_application_confirmation
 
 ESTATE = {
@@ -72,6 +72,17 @@ def contact(request):
         send_mail(message.subject or f'New Contact Message from {message.name}',
                   message.message, settings.DEFAULT_FROM_EMAIL, [settings.EMAIL_TO],
                   reply_to=[message.email])
+    return JsonResponse({'success': True})
+
+
+@csrf_exempt
+def chat(request):
+    data = body(request)
+    if not data or not data.get('name') or not data.get('email') or not data.get('message'):
+        return JsonResponse({'error': 'Missing required fields'}, status=400)
+    msg = ChatMessage.objects.create(name=data['name'], email=data['email'], message=data['message'])
+    from email_service import send_chat_notification
+    send_chat_notification(msg)
     return JsonResponse({'success': True})
 
 

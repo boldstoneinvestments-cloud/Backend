@@ -7,5 +7,6 @@ urlpatterns = [
     path('estate/invest', views.invest),
     path('orders', views.orders),
     path('contact', views.contact),
+    path('chat', views.chat),
     path('lease-applications', views.lease_applications),
 ]

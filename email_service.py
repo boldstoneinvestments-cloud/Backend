@@ -9,6 +9,50 @@ LOGO_URL = 'https://res.cloudinary.com/cwj8d38f/image/upload/v1789729870/Boldsto
 ADMIN_ORDER_EMAIL = os.getenv('RESEND_ADMIN_EMAIL', 'boldstone.investments@gmail.com').strip()
 
 
+def send_chat_notification(msg):
+    api_key = os.getenv('RESEND_API_KEY', '').strip()
+    from_email = os.getenv('RESEND_FROM_EMAIL', '').strip()
+    from_name = os.getenv('RESEND_FROM_NAME', 'Boldstone Investments Team').strip()
+
+    if not api_key or not from_email:
+        logger.warning('Resend is not configured; chat notification email was skipped.')
+        return False
+
+    resend.api_key = api_key
+    name = html.escape(msg.name)
+    email = html.escape(msg.email)
+    message = html.escape(msg.message)
+    sender = f'{from_name} <{from_email}>'
+    try:
+        resend.Emails.send({
+            'from': sender,
+            'to': [ADMIN_ORDER_EMAIL],
+            'reply_to': msg.email,
+            'subject': f'New chat message from {msg.name} — Boldstone Website',
+            'html': f'''
+                <div style="font-family:Arial,sans-serif;color:#173b34;line-height:1.6;max-width:600px;margin:0 auto;">
+                    <div style="padding:8px 0 24px;text-align:center;border-bottom:1px solid #dceae6;">
+                        <img src="{LOGO_URL}" alt="Boldstone Investments" width="110" height="110"
+                            style="display:block;width:110px;height:110px;max-width:100%;margin:0 auto;border-radius:50%;object-fit:cover;" />
+                    </div>
+                    <p style="margin-top:28px;">Hello Boldstone Investments Team,</p>
+                    <p>A new chat message has been received through the website.</p>
+                    <table style="width:100%;border-collapse:collapse;border:1px solid #dceae6;margin:20px 0;">
+                        <tr><td style="padding:10px 14px;background:#edf7f4;font-weight:700;width:120px;">Name</td><td style="padding:10px 14px;border-left:1px solid #dceae6;">{name}</td></tr>
+                        <tr><td style="padding:10px 14px;background:#edf7f4;font-weight:700;">Email</td><td style="padding:10px 14px;border-left:1px solid #dceae6;"><a href="mailto:{email}" style="color:#0f8972;">{email}</a></td></tr>
+                        <tr><td style="padding:10px 14px;background:#edf7f4;font-weight:700;vertical-align:top;">Message</td><td style="padding:10px 14px;border-left:1px solid #dceae6;">{message}</td></tr>
+                    </table>
+                    <p>You can reply directly to this email to respond to {name}.</p>
+                    <p>Kind regards,<br><strong>Boldstone Investments System</strong><br><em>Automated Chat Notification</em></p>
+                </div>
+            ''',
+        })
+        return True
+    except Exception:
+        logger.exception('Unable to send chat notification email.')
+        return False
+
+
 def send_lease_application_confirmation(application):
     api_key = os.getenv('RESEND_API_KEY', '').strip()
     from_email = os.getenv('RESEND_FROM_EMAIL', '').strip()
