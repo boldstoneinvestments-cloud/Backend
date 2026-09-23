@@ -27,10 +27,29 @@ ESTATE = {
 User = get_user_model()
 
 
+def customer_token(user):
+    return signing.dumps({'user_id': user.id}, salt='customer-auth')
+
+
+def token_user(request):
+    header = request.headers.get('Authorization', '')
+    if not header.startswith('Bearer '):
+        return None
+    try:
+        payload = signing.loads(header[7:], salt='customer-auth', max_age=60 * 60 * 24 * 30)
+        return User.objects.filter(id=payload.get('user_id'), is_active=True, is_staff=False).first()
+    except (signing.BadSignature, TypeError, ValueError):
+        return None
+
+
 def customer_required(view):
     def wrapped(request, *args, **kwargs):
-        if request.user.is_anonymous or request.user.is_staff:
+        user = token_user(request)
+        if user is None and not request.user.is_anonymous and not request.user.is_staff:
+            user = request.user
+        if user is None:
             return JsonResponse({'error': 'Sign in required'}, status=401)
+        request.api_user = user
         return view(request, *args, **kwargs)
     return wrapped
 
@@ -107,7 +126,7 @@ def google_callback(request):
     CustomerProfile.objects.get_or_create(user=user)
     ChatMessage.objects.filter(user__isnull=True, email__iexact=email).update(user=user)
     login(request, user)
-    return redirect(f'{frontend_url}/?google=success')
+    return redirect(f'{frontend_url}/#google_token={customer_token(user)}')
 
 
 def serialize_account(user):
@@ -131,7 +150,7 @@ def account_signup(request):
     CustomerProfile.objects.create(user=user)
     ChatMessage.objects.filter(user__isnull=True, email__iexact=email).update(user=user)
     login(request, user)
-    return JsonResponse({'user': serialize_account(user)}, status=201)
+    return JsonResponse({'user': serialize_account(user), 'token': customer_token(user)}, status=201)
 
 
 def account_login(request):
@@ -144,13 +163,16 @@ def account_login(request):
     if user is None:
         return JsonResponse({'error': 'Invalid email or password'}, status=401)
     login(request, user)
-    return JsonResponse({'user': serialize_account(user)})
+    return JsonResponse({'user': serialize_account(user), 'token': customer_token(user)})
 
 
 def account_me(request):
-    if request.user.is_anonymous or request.user.is_staff:
+    user = token_user(request)
+    if user is None and not request.user.is_anonymous and not request.user.is_staff:
+        user = request.user
+    if user is None:
         return JsonResponse({'authenticated': False})
-    return JsonResponse({'authenticated': True, 'user': serialize_account(request.user)})
+    return JsonResponse({'authenticated': True, 'user': serialize_account(user)})
 
 
 @customer_required
@@ -207,7 +229,10 @@ def contact(request):
 
 
 def chat(request):
-    if request.user.is_anonymous or request.user.is_staff:
+    user = token_user(request)
+    if user is None and not request.user.is_anonymous and not request.user.is_staff:
+        user = request.user
+    if user is None:
         return JsonResponse({'error': 'Sign in required'}, status=401)
     data = body(request)
     if request.method == 'GET':
@@ -219,7 +244,7 @@ def chat(request):
                     'is_admin': message.is_admin,
                     'created_at': message.created_at.isoformat(),
                 }
-                for message in ChatMessage.objects.filter(user=request.user).order_by('created_at')
+                for message in ChatMessage.objects.filter(user=user).order_by('created_at')
             ],
         })
 
@@ -227,7 +252,7 @@ def chat(request):
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     if not data or not data.get('message'):
         return JsonResponse({'error': 'Missing required fields'}, status=400)
-    msg = ChatMessage.objects.create(user=request.user, name=request.user.get_full_name(), email=request.user.email, message=data['message'], is_admin=False)
+    msg = ChatMessage.objects.create(user=user, name=user.get_full_name(), email=user.email, message=data['message'], is_admin=False)
     from email_service import send_chat_notification
     threading.Thread(target=send_chat_notification, args=(msg,), daemon=True).start()
     return JsonResponse({'success': True, 'message': {
@@ -238,6 +263,9 @@ def chat(request):
 
 @customer_required
 def chat_stream(request):
+    request.api_user = token_user(request)
+    if request.api_user is None and not request.user.is_anonymous and not request.user.is_staff:
+        request.api_user = request.user
     try:
         last_id = int(request.GET.get('last_id', 0))
     except (TypeError, ValueError):
@@ -246,7 +274,7 @@ def chat_stream(request):
     def events():
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
-            messages = ChatMessage.objects.filter(user=request.user, id__gt=last_id).order_by('id')
+            messages = ChatMessage.objects.filter(user=request.api_user, id__gt=last_id).order_by('id')
             if messages.exists():
                 for message in messages:
                     yield f"data: {json.dumps({'id': message.id, 'message': message.message, 'is_admin': message.is_admin, 'created_at': message.created_at.isoformat()})}\n\n"
