@@ -11,4 +11,5 @@ urlpatterns = [
     path('lease-applications', admin_views.admin_lease_applications),
     path('lease-applications/<int:application_id>', admin_views.admin_delete_lease_application),
     path('chat', admin_views.admin_chat_messages),
+    path('chat/reply', admin_views.admin_chat_reply),
 ]

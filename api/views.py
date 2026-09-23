@@ -78,9 +78,27 @@ def contact(request):
 @csrf_exempt
 def chat(request):
     data = body(request)
+    if request.method == 'GET':
+        email = str(request.GET.get('email', '')).strip()
+        if not email:
+            return JsonResponse({'error': 'Email is required'}, status=400)
+        return JsonResponse({
+            'messages': [
+                {
+                    'id': message.id,
+                    'message': message.message,
+                    'is_admin': message.is_admin,
+                    'created_at': message.created_at.isoformat(),
+                }
+                for message in ChatMessage.objects.filter(email__iexact=email).order_by('created_at')
+            ],
+        })
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
     if not data or not data.get('name') or not data.get('email') or not data.get('message'):
         return JsonResponse({'error': 'Missing required fields'}, status=400)
-    msg = ChatMessage.objects.create(name=data['name'], email=data['email'], message=data['message'])
+    msg = ChatMessage.objects.create(name=data['name'], email=data['email'], message=data['message'], is_admin=False)
     from email_service import send_chat_notification
     send_chat_notification(msg)
     return JsonResponse({'success': True})

@@ -232,11 +232,43 @@ def admin_chat_messages(request):
                 'name': message.name,
                 'email': message.email,
                 'message': message.message,
+                'is_admin': message.is_admin,
                 'created_at': message.created_at.isoformat(),
             }
             for message in messages
         ],
     })
+
+
+@csrf_exempt
+@login_required
+def admin_chat_reply(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    name = str(data.get('name', '')).strip()
+    email = str(data.get('email', '')).strip()
+    message = str(data.get('message', '')).strip()
+    if not name or not email or not message:
+        return JsonResponse({'error': 'Name, email, and message are required'}, status=400)
+
+    reply = ChatMessage.objects.create(name=name, email=email, message=message, is_admin=True)
+    return JsonResponse({
+        'success': True,
+        'message': {
+            'id': reply.id,
+            'name': reply.name,
+            'email': reply.email,
+            'message': reply.message,
+            'is_admin': reply.is_admin,
+            'created_at': reply.created_at.isoformat(),
+        },
+    }, status=201)
 
 
 @csrf_exempt
