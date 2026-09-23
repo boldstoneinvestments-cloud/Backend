@@ -144,9 +144,10 @@ def account_login(request):
     return JsonResponse({'user': serialize_account(user)})
 
 
-@customer_required
 def account_me(request):
-    return JsonResponse({'user': serialize_account(request.user)})
+    if request.user.is_anonymous or request.user.is_staff:
+        return JsonResponse({'authenticated': False})
+    return JsonResponse({'authenticated': True, 'user': serialize_account(request.user)})
 
 
 @customer_required
