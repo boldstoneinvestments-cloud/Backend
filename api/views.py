@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
 from django.http import JsonResponse, StreamingHttpResponse
 from django.middleware.csrf import get_token
+from django.views.decorators.csrf import csrf_exempt
 from .models import ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
 from email_service import send_lease_application_confirmation
 
