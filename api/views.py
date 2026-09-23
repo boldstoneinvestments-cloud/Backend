@@ -104,7 +104,7 @@ def google_callback(request):
     CustomerProfile.objects.get_or_create(user=user)
     ChatMessage.objects.filter(user__isnull=True, email__iexact=email).update(user=user)
     login(request, user)
-    return redirect(frontend_url)
+    return redirect(f'{frontend_url}/?google=success')
 
 
 def serialize_account(user):
@@ -241,7 +241,7 @@ def chat_stream(request):
         last_id = 0
 
     def events():
-        deadline = time.monotonic() + 25
+        deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
             messages = ChatMessage.objects.filter(user=request.user, id__gt=last_id).order_by('id')
             if messages.exists():
