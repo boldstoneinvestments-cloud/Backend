@@ -2,6 +2,7 @@ import json
 import os
 import time
 import secrets
+import threading
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from django.conf import settings
@@ -228,7 +229,7 @@ def chat(request):
         return JsonResponse({'error': 'Missing required fields'}, status=400)
     msg = ChatMessage.objects.create(user=request.user, name=request.user.get_full_name(), email=request.user.email, message=data['message'], is_admin=False)
     from email_service import send_chat_notification
-    send_chat_notification(msg)
+    threading.Thread(target=send_chat_notification, args=(msg,), daemon=True).start()
     return JsonResponse({'success': True, 'message': {
         'id': msg.id, 'message': msg.message, 'is_admin': False,
         'created_at': msg.created_at.isoformat(),
