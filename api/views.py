@@ -28,6 +28,7 @@ ESTATE = {
 User = get_user_model()
 MAX_CHAT_FILE_SIZE = 5 * 1024 * 1024
 ALLOWED_CHAT_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx', '.txt', '.csv'}
+CUSTOMER_TOKEN_MAX_AGE = 60 * 60 * 24 * 365 * 10
 
 
 def chat_attachment_url(message):
@@ -89,7 +90,7 @@ def token_user(request):
     if not header.startswith('Bearer '):
         return None
     try:
-        payload = signing.loads(header[7:], salt='customer-auth', max_age=60 * 60 * 24 * 30)
+        payload = signing.loads(header[7:], salt='customer-auth', max_age=CUSTOMER_TOKEN_MAX_AGE)
         return User.objects.filter(id=payload.get('user_id'), is_active=True, is_staff=False).first()
     except (signing.BadSignature, TypeError, ValueError):
         return None
