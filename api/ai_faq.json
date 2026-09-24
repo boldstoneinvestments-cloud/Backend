@@ -1,5 +1,35 @@
 [
   {
+    "intent": "investment_interest",
+    "keywords": ["invest", "investment", "investor", "opportunity", "opportunities", "interested", "start"],
+    "answer": "Boldstone offers managed coffee-farming investment through monthly and annual plans. The program combines leased agricultural land, coffee farm establishment, farm management, agronomy support, maintenance, and progress updates. You can get started by reviewing the plans and submitting your details through the Lease a Coffee Farm application page."
+  },
+  {
+    "intent": "investment_options",
+    "keywords": ["invest", "investment", "option", "options", "plan", "plans", "monthly", "annual"],
+    "answer": "Boldstone currently presents two main coffee-farming options: a Monthly Subscription Plan for a phased, manageable commitment and an Annual Plan for customers who want the farm established without waiting for the phased setup period."
+  },
+  {
+    "intent": "investment_cost",
+    "keywords": ["invest", "investment", "cost", "price", "fee", "fees", "minimum", "how", "much", "pay"],
+    "answer": "The Monthly Subscription Plan is designed for a manageable monthly commitment, while the Annual Plan covers the annual farming arrangement. The exact current price and payment details should be confirmed on the Lease a Coffee Farm page or with Boldstone support before you commit."
+  },
+  {
+    "intent": "investment_returns",
+    "keywords": ["invest", "investment", "return", "returns", "profit", "profits", "income", "money", "guarantee"],
+    "answer": "Coffee farming involves biological, climate, agronomic, and market risks. Boldstone does not guarantee a particular yield, harvest volume, coffee price, profit, or financial return. Any revenue and harvesting arrangements are outlined in the subscriber agreement."
+  },
+  {
+    "intent": "investment_process",
+    "keywords": ["invest", "investment", "process", "apply", "application", "register", "join", "start", "details"],
+    "answer": "To begin, review the coffee-farming plans, submit the Lease a Coffee Farm application with your contact details, and speak with Boldstone about the arrangement that fits your goals. Do not send passwords, card numbers, or other sensitive information in chat."
+  },
+  {
+    "intent": "investment_location",
+    "keywords": ["invest", "investment", "where", "location", "located", "farm", "uganda", "kyenjojo"],
+    "answer": "Boldstone's coffee estate is in Kyenjojo District in Western Uganda. Boldstone operates from Fort Portal and works across nearby farming and trade areas in Western Uganda."
+  },
+  {
     "intent": "estate_location",
     "keywords": ["where", "estate", "farm", "location", "located", "kyenjojo", "district"],
     "answer": "The Boldstone coffee estate is in Kyenjojo District in Western Uganda."
