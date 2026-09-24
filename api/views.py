@@ -291,7 +291,6 @@ def chat(request):
         user = request.user
     if user is None:
         return JsonResponse({'error': 'Sign in required'}, status=401)
-    data = body(request)
     if request.method == 'GET':
         return JsonResponse({
             'messages': [
@@ -302,6 +301,7 @@ def chat(request):
 
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
+    data = body(request) if request.content_type == 'application/json' else None
     message_text = str((data or {}).get('message', '') if data is not None else request.POST.get('message', '')).strip()
     uploads = request.FILES.getlist('attachment')
     if not message_text and not uploads:
