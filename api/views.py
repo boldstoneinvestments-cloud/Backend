@@ -61,8 +61,11 @@ def process_chat_ai_followup(user_id, message_id):
     if user is None or message is None or ChatMessage.objects.filter(user=user, is_admin=True).exists():
         return
 
-    from .gemini import generate_supported_reply
-    ai_text = generate_supported_reply(chat_history_for(user))
+    try:
+        from .gemini import generate_supported_reply
+        ai_text = generate_supported_reply(chat_history_for(user))
+    except Exception:
+        ai_text = None
     if ChatMessage.objects.filter(user=user, is_admin=True).exists():
         return
 
@@ -341,6 +344,26 @@ def chat_attachment(request, message_id):
     if message is None or not message.attachment:
         return JsonResponse({'error': 'Attachment not found'}, status=404)
     return FileResponse(message.attachment.open('rb'), as_attachment=False, filename=message.attachment.name.rsplit('/', 1)[-1])
+
+
+@csrf_exempt
+@customer_required
+def chat_message_actions(request, message_id):
+    message = ChatMessage.objects.filter(id=message_id, user=request.api_user, is_admin=False, is_ai=False).first()
+    if message is None:
+        return JsonResponse({'error': 'Message not found'}, status=404)
+    if request.method == 'DELETE':
+        message.delete()
+        return JsonResponse({'success': True, 'id': message_id})
+    if request.method not in ('PATCH', 'PUT'):
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    data = body(request)
+    text = str((data or {}).get('message', '')).strip()
+    if not text:
+        return JsonResponse({'error': 'Message cannot be empty'}, status=400)
+    message.message = text
+    message.save(update_fields=['message'])
+    return JsonResponse({'success': True, 'message': chat_message_payload(message)})
 
 
 @customer_required

@@ -414,6 +414,42 @@ def admin_chat_reply(request):
 
 @csrf_exempt
 @login_required
+def admin_chat_message_actions(request, message_id):
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Admin access required'}, status=403)
+    message = ChatMessage.objects.filter(id=message_id).first()
+    if message is None:
+        return JsonResponse({'error': 'Message not found'}, status=404)
+    if request.method == 'DELETE':
+        message.delete()
+        return JsonResponse({'success': True, 'id': message_id})
+    if request.method != 'PATCH' or not message.is_admin:
+        return JsonResponse({'error': 'Only admin messages can be edited'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    text = str(data.get('message', '')).strip()
+    if not text:
+        return JsonResponse({'error': 'Message cannot be empty'}, status=400)
+    message.message = text
+    message.save(update_fields=['message'])
+    return JsonResponse({'success': True, 'message': {'id': message.id, 'message': message.message}})
+
+
+@csrf_exempt
+@login_required
+def admin_delete_chat(request, email):
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Admin access required'}, status=403)
+    if request.method != 'DELETE':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    deleted, _ = ChatMessage.objects.filter(email__iexact=email).delete()
+    return JsonResponse({'success': True, 'deleted': deleted})
+
+
+@csrf_exempt
+@login_required
 def admin_delete_lease_application(request, application_id):
     if request.method != 'DELETE':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
