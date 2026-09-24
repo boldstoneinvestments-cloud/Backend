@@ -3,7 +3,6 @@ import os
 import time
 import secrets
 import threading
-from datetime import timedelta
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from django.conf import settings
@@ -13,9 +12,8 @@ from django.http import JsonResponse, StreamingHttpResponse
 from django.middleware.csrf import get_token
 from django.core import signing
 from django.db import connection
-from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from .models import AdminPresence, ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
+from .models import ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
 from email_service import send_lease_application_confirmation
 
 ESTATE = {
@@ -271,9 +269,8 @@ def chat(request):
         'created_at': msg.created_at.isoformat(),
     }}
 
-    admin_is_active = AdminPresence.objects.filter(last_seen__gte=timezone.now() - timedelta(seconds=60)).exists()
     admin_has_replied = ChatMessage.objects.filter(user=user, is_admin=True).exists()
-    if not admin_is_active and not admin_has_replied:
+    if not admin_has_replied:
         from .gemini import generate_supported_reply
         history = [
             {'role': 'model' if item.is_admin or item.is_ai else 'user', 'text': item.message}
