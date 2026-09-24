@@ -1,6 +1,7 @@
 import json
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
@@ -12,17 +13,6 @@ User = get_user_model()
 
 
 def serialize_admin_user(user):
-    return {
-        'id': user.id,
-        'name': user.get_full_name(),
-        'username': user.username,
-        'email': user.email,
-        'is_active': user.is_active,
-        'date_joined': user.date_joined.isoformat(),
-    }
-
-
-def serialize_customer_user(user):
     return {
         'id': user.id,
         'name': user.get_full_name(),
@@ -151,7 +141,7 @@ def admin_customers(request):
     if request.method == 'GET':
         contacts = {}
 
-        def add_contact(email, name='', phone='', source='', created_at=None, account=None):
+        def add_contact(email, name='', phone='', source='', reason='', created_at=None, account=None, details=None):
             key = email.lower()
             contact = contacts.setdefault(key, {
                 'id': account.id if account else f'contact-{len(contacts) + 1}',
@@ -163,6 +153,7 @@ def admin_customers(request):
                 'sources': [],
                 'date_joined': created_at.isoformat() if created_at else '',
                 'is_active': account.is_active if account else None,
+                'records': [],
             })
             if account:
                 contact.update({
@@ -180,17 +171,24 @@ def admin_customers(request):
                 contact['phone'] = phone
             if source and source not in contact['sources']:
                 contact['sources'].append(source)
+            if source and not any(record['source'] == source and record['date'] == created_at.isoformat() for record in contact['records']):
+                contact['records'].append({
+                    'source': source,
+                    'reason': reason,
+                    'date': created_at.isoformat() if created_at else '',
+                    'details': details or {},
+                })
             if created_at and (not contact['date_joined'] or created_at.isoformat() > contact['date_joined']):
                 contact['date_joined'] = created_at.isoformat()
 
         for user in User.objects.filter(is_staff=False).order_by('first_name', 'last_name', 'email'):
-            add_contact(user.email, user.get_full_name(), source='Chat account', created_at=user.date_joined, account=user)
+            add_contact(user.email, user.get_full_name(), source='Chat account', reason='Signed up to use customer chat', created_at=user.date_joined, account=user, details={'username': user.username})
         for order in ShopOrder.objects.order_by('created_at'):
-            add_contact(order.email, order.name, order.phone, 'Order', order.created_at)
+            add_contact(order.email, order.name, order.phone, 'Order page', 'Placed an order', order.created_at, details={'product': order.product_name, 'quantity': order.quantity, 'location': order.location, 'country': order.country, 'province': order.province, 'district': order.district, 'street': order.street, 'village': order.village, 'notes': order.notes, 'invoice_number': order.invoice_number})
         for order in Order.objects.order_by('created_at'):
-            add_contact(order.email, order.name, order.phone, 'Order', order.created_at)
+            add_contact(order.email, order.name, order.phone, 'Order page', 'Placed an order', order.created_at, details={'product': order.product, 'quantity': order.quantity, 'location': order.location, 'notes': order.notes})
         for application in LeaseApplication.objects.order_by('created_at'):
-            add_contact(application.email, application.full_name, application.phone, 'Lease application', application.created_at)
+            add_contact(application.email, application.full_name, application.phone, 'Lease page', 'Applied to lease a coffee farm', application.created_at, details={'plan': application.plan, 'country': application.country, 'address': application.address, 'status': application.status, 'notes': application.notes})
 
         return JsonResponse({
             'customers': sorted(contacts.values(), key=lambda contact: (contact['name'] or contact['email']).lower()),
@@ -201,43 +199,20 @@ def admin_customers(request):
 
 @csrf_exempt
 @login_required
-def admin_customer_detail(request, user_id):
-    if request.method != 'PUT':
+def admin_customer_delete(request, email):
+    if request.method != 'DELETE':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-    try:
-        data = json.loads(request.body or '{}')
-    except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    with transaction.atomic():
+        user_deleted, _ = User.objects.filter(email__iexact=email, is_staff=False).delete()
+        orders_deleted, _ = ShopOrder.objects.filter(email__iexact=email).delete()
+        legacy_orders_deleted, _ = Order.objects.filter(email__iexact=email).delete()
+        applications_deleted, _ = LeaseApplication.objects.filter(email__iexact=email).delete()
+        messages_deleted, _ = ChatMessage.objects.filter(email__iexact=email).delete()
 
-    user = User.objects.filter(id=user_id, is_staff=False).first()
-    if user is None:
+    if not any((user_deleted, orders_deleted, legacy_orders_deleted, applications_deleted, messages_deleted)):
         return JsonResponse({'error': 'Customer not found'}, status=404)
-
-    name = str(data.get('name', '')).strip()
-    username = str(data.get('username', '')).strip()
-    email = str(data.get('email', '')).strip()
-    password = str(data.get('password', ''))
-    is_active = data.get('is_active', user.is_active)
-    if not name or not username or not email:
-        return JsonResponse({'error': 'Name, username, and email are required'}, status=400)
-    if password and len(password) < 8:
-        return JsonResponse({'error': 'Password must be at least 8 characters'}, status=400)
-    if User.objects.filter(username=username).exclude(id=user.id).exists():
-        return JsonResponse({'error': 'That username is already in use'}, status=409)
-    if User.objects.filter(email__iexact=email).exclude(id=user.id).exists():
-        return JsonResponse({'error': 'That email is already in use'}, status=409)
-
-    name_parts = name.split(None, 1)
-    user.first_name = name_parts[0]
-    user.last_name = name_parts[1] if len(name_parts) > 1 else ''
-    user.username = username
-    user.email = email
-    user.is_active = bool(is_active)
-    if password:
-        user.set_password(password)
-    user.save()
-    return JsonResponse({'success': True, 'customer': serialize_customer_user(user)})
+    return JsonResponse({'success': True})
 
 
 @login_required
