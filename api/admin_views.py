@@ -149,11 +149,51 @@ def admin_user_detail(request, user_id):
 @login_required
 def admin_customers(request):
     if request.method == 'GET':
+        contacts = {}
+
+        def add_contact(email, name='', phone='', source='', created_at=None, account=None):
+            key = email.lower()
+            contact = contacts.setdefault(key, {
+                'id': account.id if account else f'contact-{len(contacts) + 1}',
+                'account_id': account.id if account else None,
+                'name': name,
+                'username': account.username if account else '',
+                'email': email,
+                'phone': phone,
+                'sources': [],
+                'date_joined': created_at.isoformat() if created_at else '',
+                'is_active': account.is_active if account else None,
+            })
+            if account:
+                contact.update({
+                    'id': account.id,
+                    'account_id': account.id,
+                    'name': account.get_full_name() or contact['name'],
+                    'username': account.username,
+                    'email': account.email,
+                    'is_active': account.is_active,
+                    'date_joined': account.date_joined.isoformat(),
+                })
+            elif not contact['name']:
+                contact['name'] = name
+            if phone and not contact['phone']:
+                contact['phone'] = phone
+            if source and source not in contact['sources']:
+                contact['sources'].append(source)
+            if created_at and (not contact['date_joined'] or created_at.isoformat() > contact['date_joined']):
+                contact['date_joined'] = created_at.isoformat()
+
+        for user in User.objects.filter(is_staff=False).order_by('first_name', 'last_name', 'email'):
+            add_contact(user.email, user.get_full_name(), source='Chat account', created_at=user.date_joined, account=user)
+        for order in ShopOrder.objects.order_by('created_at'):
+            add_contact(order.email, order.name, order.phone, 'Order', order.created_at)
+        for order in Order.objects.order_by('created_at'):
+            add_contact(order.email, order.name, order.phone, 'Order', order.created_at)
+        for application in LeaseApplication.objects.order_by('created_at'):
+            add_contact(application.email, application.full_name, application.phone, 'Lease application', application.created_at)
+
         return JsonResponse({
-            'customers': [
-                serialize_customer_user(user)
-                for user in User.objects.filter(is_staff=False).order_by('first_name', 'last_name', 'email')
-            ],
+            'customers': sorted(contacts.values(), key=lambda contact: (contact['name'] or contact['email']).lower()),
         })
 
     return JsonResponse({'error': 'Method not allowed'}, status=405)
