@@ -1,0 +1,37 @@
+[
+  {
+    "intent": "estate_location",
+    "keywords": ["where", "estate", "farm", "location", "located", "kyenjojo", "district"],
+    "answer": "The Boldstone coffee estate is in Kyenjojo District in Western Uganda."
+  },
+  {
+    "intent": "monthly_plan",
+    "keywords": ["monthly", "plan", "subscription", "payment", "month"],
+    "answer": "The Monthly Subscription Plan is designed for a manageable monthly commitment. During the first six months, payments contribute toward land preparation, seedlings, and farm establishment. From Month 7, Boldstone begins establishing the one-acre coffee farm while the subscription continues."
+  },
+  {
+    "intent": "annual_plan",
+    "keywords": ["annual", "yearly", "plan", "subscription", "farm"],
+    "answer": "The Annual Plan is designed for customers who want their coffee farm established without waiting for a phased setup period."
+  },
+  {
+    "intent": "land_lease",
+    "keywords": ["lease", "land", "own", "purchase", "farm"],
+    "answer": "Boldstone offers professionally managed coffee farming through land leasing and farming plans. Customers participate in a managed farming program and do not purchase the land."
+  },
+  {
+    "intent": "shop_products",
+    "keywords": ["product", "products", "sell", "shop", "buy", "coffee", "seedling", "seedlings", "trees", "roasted"],
+    "answer": "The Boldstone shop may offer Arabica coffee seedlings, Robusta coffee seedlings, roasted coffee, and indigenous trees."
+  },
+  {
+    "intent": "farming_risk",
+    "keywords": ["guarantee", "yield", "return", "profit", "harvest", "price", "risk"],
+    "answer": "Coffee farming is affected by biological, climatic, agronomic, and market risks. Boldstone does not guarantee a particular yield, harvest volume, coffee price, or financial return."
+  },
+  {
+    "intent": "farming_inclusions",
+    "keywords": ["include", "included", "service", "services", "seedling", "management", "agronomy", "maintenance"],
+    "answer": "Depending on the selected plan, the program may include land access, coffee seedling establishment, indigenous shade tree seedlings, farm management, agronomy supervision, maintenance, and monitoring."
+  }
+]
