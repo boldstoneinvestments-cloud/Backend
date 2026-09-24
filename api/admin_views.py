@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import transaction
@@ -10,10 +11,13 @@ from django.contrib.auth.decorators import login_required
 from .models import AdminPresence, ChatMessage, LeaseApplication, Order
 from shop.models import ShopOrder
 
+MAX_CHAT_FILE_SIZE = 5 * 1024 * 1024
+ALLOWED_CHAT_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx', '.txt', '.csv'}
+
 User = get_user_model()
 
 ADMIN_IDENTITIES = {
-    'SSEMATA SABITA': 'https://address-restaurant2.odoo.com/web/image/1888-df4ef49b/Sabira.webp',
+    'SSEMATA SABIRA': 'https://address-restaurant2.odoo.com/web/image/1888-df4ef49b/Sabira.webp',
     'MOSES ALICWAMU': 'https://address-restaurant2.odoo.com/web/image/1571-51dfbae5/Moses%20Photo%20-%20up%20to%20date.webp',
     'HABIB TUMWESIGE': 'https://address-restaurant2.odoo.com/web/image/1982-2595a3af/Habib%20Salah.webp',
 }
@@ -324,6 +328,8 @@ def admin_chat_messages(request):
                 'is_ai': message.is_ai,
                 'admin_name': message.admin_name,
                 'admin_avatar': message.admin_avatar,
+                'attachment_url': f'/api/chat/attachments/{message.id}' if message.attachment else '',
+                'attachment_name': message.attachment.name.rsplit('/', 1)[-1] if message.attachment else '',
                 'created_at': message.created_at.isoformat(),
             }
             for message in messages
@@ -348,25 +354,31 @@ def admin_chat_reply(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-    try:
-        data = json.loads(request.body or '{}')
-    except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    if request.content_type == 'application/json':
+        try:
+            data = json.loads(request.body or '{}')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    else:
+        data = request.POST
 
     name = str(data.get('name', '')).strip()
     email = str(data.get('email', '')).strip()
     message = str(data.get('message', '')).strip()
     admin_name = str(data.get('admin_name', '')).strip().upper()
+    upload = request.FILES.get('attachment')
     admin_avatar = ADMIN_IDENTITIES.get(admin_name)
-    if not name or not email or not message or not admin_name:
-        return JsonResponse({'error': 'Admin identity and message are required'}, status=400)
+    if upload and (upload.size > MAX_CHAT_FILE_SIZE or Path(upload.name).suffix.lower() not in ALLOWED_CHAT_EXTENSIONS):
+        return JsonResponse({'error': 'Files must be images, documents, or text files smaller than 5 MB'}, status=400)
+    if not name or not email or (not message and not upload) or not admin_name:
+        return JsonResponse({'error': 'Admin identity and message or attachment are required'}, status=400)
     if not admin_avatar:
         return JsonResponse({'error': 'Select a valid admin identity'}, status=400)
 
     customer = User.objects.filter(email__iexact=email, is_staff=False).first()
     if customer is None:
         return JsonResponse({'error': 'Customer account not found'}, status=404)
-    reply = ChatMessage.objects.create(user=customer, name=customer.get_full_name(), email=customer.email, message=message, is_admin=True, admin_name=admin_name, admin_avatar=admin_avatar)
+    reply = ChatMessage.objects.create(user=customer, name=customer.get_full_name(), email=customer.email, message=message, is_admin=True, admin_name=admin_name, admin_avatar=admin_avatar, attachment=upload)
     return JsonResponse({
         'success': True,
         'message': {
@@ -378,6 +390,8 @@ def admin_chat_reply(request):
             'is_ai': reply.is_ai,
             'admin_name': reply.admin_name,
             'admin_avatar': reply.admin_avatar,
+            'attachment_url': f'/api/chat/attachments/{reply.id}' if reply.attachment else '',
+            'attachment_name': reply.attachment.name.rsplit('/', 1)[-1] if reply.attachment else '',
             'created_at': reply.created_at.isoformat(),
         },
     }, status=201)

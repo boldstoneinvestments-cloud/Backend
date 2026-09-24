@@ -45,6 +45,7 @@ class ChatMessage(models.Model):
     is_ai = models.BooleanField(default=False)
     admin_name = models.CharField(max_length=200, blank=True)
     admin_avatar = models.URLField(blank=True)
+    attachment = models.FileField(upload_to='chat_attachments/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

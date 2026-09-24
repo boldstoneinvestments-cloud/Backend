@@ -15,6 +15,7 @@ urlpatterns = [
     path('orders', views.orders),
     path('contact', views.contact),
     path('chat', views.chat),
+    path('chat/attachments/<int:message_id>', views.chat_attachment),
     path('chat/stream', views.chat_stream),
     path('lease-applications', views.lease_applications),
 ]

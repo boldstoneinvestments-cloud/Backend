@@ -8,7 +8,7 @@ from urllib.request import Request, urlopen
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.core.mail import send_mail
-from django.http import JsonResponse, StreamingHttpResponse
+from django.http import FileResponse, JsonResponse, StreamingHttpResponse
 from django.middleware.csrf import get_token
 from django.core import signing
 from django.db import connection
@@ -26,6 +26,26 @@ ESTATE = {
     'TOTAL_ACRES': 3000,
 }
 User = get_user_model()
+MAX_CHAT_FILE_SIZE = 5 * 1024 * 1024
+ALLOWED_CHAT_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx', '.txt', '.csv'}
+
+
+def chat_attachment_url(message):
+    return f'/api/chat/attachments/{message.id}' if message.attachment else ''
+
+
+def chat_message_payload(message):
+    return {
+        'id': message.id,
+        'message': message.message,
+        'is_admin': message.is_admin,
+        'is_ai': message.is_ai,
+        'admin_name': message.admin_name,
+        'admin_avatar': message.admin_avatar,
+        'attachment_url': chat_attachment_url(message),
+        'attachment_name': message.attachment.name.rsplit('/', 1)[-1] if message.attachment else '',
+        'created_at': message.created_at.isoformat(),
+    }
 
 
 def chat_history_for(user):
@@ -275,28 +295,23 @@ def chat(request):
     if request.method == 'GET':
         return JsonResponse({
             'messages': [
-                {
-                    'id': message.id,
-                    'message': message.message,
-                    'is_admin': message.is_admin,
-                    'is_ai': message.is_ai,
-                    'admin_name': message.admin_name,
-                    'admin_avatar': message.admin_avatar,
-                    'created_at': message.created_at.isoformat(),
-                }
+                chat_message_payload(message)
                 for message in ChatMessage.objects.filter(user=user).order_by('created_at')
             ],
         })
 
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    if not data or not data.get('message'):
-        return JsonResponse({'error': 'Missing required fields'}, status=400)
-    msg = ChatMessage.objects.create(user=user, name=user.get_full_name(), email=user.email, message=data['message'], is_admin=False)
-    response = {'success': True, 'message': {
-        'id': msg.id, 'message': msg.message, 'is_admin': False,
-        'created_at': msg.created_at.isoformat(),
-    }}
+    message_text = str((data or {}).get('message', '') if data is not None else request.POST.get('message', '')).strip()
+    upload = request.FILES.get('attachment')
+    if not message_text and not upload:
+        return JsonResponse({'error': 'Message or attachment is required'}, status=400)
+    if upload:
+        from pathlib import Path
+        if upload.size > MAX_CHAT_FILE_SIZE or Path(upload.name).suffix.lower() not in ALLOWED_CHAT_EXTENSIONS:
+            return JsonResponse({'error': 'Files must be images, documents, or text files smaller than 5 MB'}, status=400)
+    msg = ChatMessage.objects.create(user=user, name=user.get_full_name(), email=user.email, message=message_text, is_admin=False, attachment=upload)
+    response = {'success': True, 'message': chat_message_payload(msg)}
 
     admin_has_replied = ChatMessage.objects.filter(user=user, is_admin=True).exists()
     if not admin_has_replied:
@@ -307,6 +322,21 @@ def chat(request):
         else:
             threading.Thread(target=process_chat_ai_followup, args=(user.id, msg.id), daemon=True).start()
     return JsonResponse(response)
+
+
+def chat_attachment(request, message_id):
+    user = token_user(request)
+    if user is None and not request.user.is_anonymous:
+        user = request.user
+    if user is None:
+        return JsonResponse({'error': 'Sign in required'}, status=401)
+    queryset = ChatMessage.objects.filter(id=message_id)
+    if not user.is_staff:
+        queryset = queryset.filter(user=user)
+    message = queryset.first()
+    if message is None or not message.attachment:
+        return JsonResponse({'error': 'Attachment not found'}, status=404)
+    return FileResponse(message.attachment.open('rb'), as_attachment=False, filename=message.attachment.name.rsplit('/', 1)[-1])
 
 
 @customer_required
@@ -325,7 +355,7 @@ def chat_stream(request):
             messages = ChatMessage.objects.filter(user=request.api_user, id__gt=last_id).order_by('id')
             if messages.exists():
                 for message in messages:
-                    yield f"data: {json.dumps({'id': message.id, 'message': message.message, 'is_admin': message.is_admin, 'is_ai': message.is_ai, 'admin_name': message.admin_name, 'admin_avatar': message.admin_avatar, 'created_at': message.created_at.isoformat()})}\n\n"
+                    yield f"data: {json.dumps(chat_message_payload(message))}\n\n"
                 return
             yield ': keep-alive\n\n'
             time.sleep(2)
