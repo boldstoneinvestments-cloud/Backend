@@ -3,6 +3,7 @@ import os
 import time
 import secrets
 import threading
+from datetime import timedelta
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from django.conf import settings
@@ -12,8 +13,9 @@ from django.http import JsonResponse, StreamingHttpResponse
 from django.middleware.csrf import get_token
 from django.core import signing
 from django.db import connection
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from .models import ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
+from .models import AdminPresence, ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
 from email_service import send_lease_application_confirmation
 
 ESTATE = {
@@ -250,6 +252,7 @@ def chat(request):
                     'id': message.id,
                     'message': message.message,
                     'is_admin': message.is_admin,
+                    'is_ai': message.is_ai,
                     'created_at': message.created_at.isoformat(),
                 }
                 for message in ChatMessage.objects.filter(user=user).order_by('created_at')
@@ -263,10 +266,27 @@ def chat(request):
     msg = ChatMessage.objects.create(user=user, name=user.get_full_name(), email=user.email, message=data['message'], is_admin=False)
     from email_service import send_chat_notification
     threading.Thread(target=send_chat_notification, args=(msg,), daemon=True).start()
-    return JsonResponse({'success': True, 'message': {
+    response = {'success': True, 'message': {
         'id': msg.id, 'message': msg.message, 'is_admin': False,
         'created_at': msg.created_at.isoformat(),
-    }})
+    }}
+
+    admin_is_active = AdminPresence.objects.filter(last_seen__gte=timezone.now() - timedelta(seconds=60)).exists()
+    admin_has_replied = ChatMessage.objects.filter(user=user, is_admin=True).exists()
+    if not admin_is_active and not admin_has_replied:
+        from .gemini import generate_supported_reply
+        history = [
+            {'role': 'model' if item.is_admin or item.is_ai else 'user', 'text': item.message}
+            for item in list(ChatMessage.objects.filter(user=user).order_by('-created_at')[:12])[::-1]
+        ]
+        ai_text = generate_supported_reply(history)
+        if ai_text:
+            ai_message = ChatMessage.objects.create(user=user, name='Boldstone AI', email=user.email, message=ai_text, is_ai=True)
+            response['ai_message'] = {
+                'id': ai_message.id, 'message': ai_message.message, 'is_admin': False, 'is_ai': True,
+                'created_at': ai_message.created_at.isoformat(),
+            }
+    return JsonResponse(response)
 
 
 @customer_required
@@ -285,7 +305,7 @@ def chat_stream(request):
             messages = ChatMessage.objects.filter(user=request.api_user, id__gt=last_id).order_by('id')
             if messages.exists():
                 for message in messages:
-                    yield f"data: {json.dumps({'id': message.id, 'message': message.message, 'is_admin': message.is_admin, 'created_at': message.created_at.isoformat()})}\n\n"
+                    yield f"data: {json.dumps({'id': message.id, 'message': message.message, 'is_admin': message.is_admin, 'is_ai': message.is_ai, 'created_at': message.created_at.isoformat()})}\n\n"
                 return
             yield ': keep-alive\n\n'
             time.sleep(2)

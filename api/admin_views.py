@@ -3,10 +3,11 @@ import json
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import transaction
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 
-from .models import ChatMessage, LeaseApplication, Order
+from .models import AdminPresence, ChatMessage, LeaseApplication, Order
 from shop.models import ShopOrder
 
 User = get_user_model()
@@ -314,11 +315,23 @@ def admin_chat_messages(request):
                 'email': message.email,
                 'message': message.message,
                 'is_admin': message.is_admin,
+                'is_ai': message.is_ai,
                 'created_at': message.created_at.isoformat(),
             }
             for message in messages
         ],
     })
+
+
+@csrf_exempt
+@login_required
+def admin_presence(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Admin access required'}, status=403)
+    AdminPresence.objects.update_or_create(user=request.user, defaults={'last_seen': timezone.now()})
+    return JsonResponse({'success': True})
 
 
 @csrf_exempt
@@ -350,6 +363,7 @@ def admin_chat_reply(request):
             'email': reply.email,
             'message': reply.message,
             'is_admin': reply.is_admin,
+            'is_ai': reply.is_ai,
             'created_at': reply.created_at.isoformat(),
         },
     }, status=201)

@@ -42,10 +42,16 @@ class ChatMessage(models.Model):
     email = models.EmailField()
     message = models.TextField()
     is_admin = models.BooleanField(default=False)
+    is_ai = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f'{self.name} — {self.created_at:%Y-%m-%d %H:%M}'
+
+
+class AdminPresence(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='admin_presence')
+    last_seen = models.DateTimeField(auto_now=True)
 
 
 class LeaseApplication(models.Model):
