@@ -450,6 +450,17 @@ def admin_delete_chat(request, email):
 
 @csrf_exempt
 @login_required
+def admin_delete_all_chats(request):
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Admin access required'}, status=403)
+    if request.method != 'DELETE':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    deleted, _ = ChatMessage.objects.all().delete()
+    return JsonResponse({'success': True, 'deleted': deleted})
+
+
+@csrf_exempt
+@login_required
 def admin_delete_lease_application(request, application_id):
     if request.method != 'DELETE':
         return JsonResponse({'error': 'Method not allowed'}, status=405)

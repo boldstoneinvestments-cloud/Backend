@@ -16,5 +16,6 @@ urlpatterns = [
     path('chat/reply', admin_views.admin_chat_reply),
     path('chat/messages/<int:message_id>', admin_views.admin_chat_message_actions),
     path('chat/<str:email>/delete', admin_views.admin_delete_chat),
+    path('chat/delete-all', admin_views.admin_delete_all_chats),
     path('presence', admin_views.admin_presence),
 ]
