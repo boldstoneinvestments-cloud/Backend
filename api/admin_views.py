@@ -12,6 +12,12 @@ from shop.models import ShopOrder
 
 User = get_user_model()
 
+ADMIN_IDENTITIES = {
+    'SSEMATA SABITA': 'https://address-restaurant2.odoo.com/web/image/1888-df4ef49b/Sabira.webp',
+    'MOSES ALICWAMU': 'https://address-restaurant2.odoo.com/web/image/1571-51dfbae5/Moses%20Photo%20-%20up%20to%20date.webp',
+    'HABIB TUMWESIGE': 'https://address-restaurant2.odoo.com/web/image/1982-2595a3af/Habib%20Salah.webp',
+}
+
 
 def serialize_admin_user(user):
     return {
@@ -316,6 +322,8 @@ def admin_chat_messages(request):
                 'message': message.message,
                 'is_admin': message.is_admin,
                 'is_ai': message.is_ai,
+                'admin_name': message.admin_name,
+                'admin_avatar': message.admin_avatar,
                 'created_at': message.created_at.isoformat(),
             }
             for message in messages
@@ -348,13 +356,17 @@ def admin_chat_reply(request):
     name = str(data.get('name', '')).strip()
     email = str(data.get('email', '')).strip()
     message = str(data.get('message', '')).strip()
-    if not name or not email or not message:
-        return JsonResponse({'error': 'Name, email, and message are required'}, status=400)
+    admin_name = str(data.get('admin_name', '')).strip().upper()
+    admin_avatar = ADMIN_IDENTITIES.get(admin_name)
+    if not name or not email or not message or not admin_name:
+        return JsonResponse({'error': 'Admin identity and message are required'}, status=400)
+    if not admin_avatar:
+        return JsonResponse({'error': 'Select a valid admin identity'}, status=400)
 
     customer = User.objects.filter(email__iexact=email, is_staff=False).first()
     if customer is None:
         return JsonResponse({'error': 'Customer account not found'}, status=404)
-    reply = ChatMessage.objects.create(user=customer, name=customer.get_full_name(), email=customer.email, message=message, is_admin=True)
+    reply = ChatMessage.objects.create(user=customer, name=customer.get_full_name(), email=customer.email, message=message, is_admin=True, admin_name=admin_name, admin_avatar=admin_avatar)
     return JsonResponse({
         'success': True,
         'message': {
@@ -364,6 +376,8 @@ def admin_chat_reply(request):
             'message': reply.message,
             'is_admin': reply.is_admin,
             'is_ai': reply.is_ai,
+            'admin_name': reply.admin_name,
+            'admin_avatar': reply.admin_avatar,
             'created_at': reply.created_at.isoformat(),
         },
     }, status=201)

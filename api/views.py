@@ -251,6 +251,8 @@ def chat(request):
                     'message': message.message,
                     'is_admin': message.is_admin,
                     'is_ai': message.is_ai,
+                    'admin_name': message.admin_name,
+                    'admin_avatar': message.admin_avatar,
                     'created_at': message.created_at.isoformat(),
                 }
                 for message in ChatMessage.objects.filter(user=user).order_by('created_at')
@@ -281,7 +283,15 @@ def chat(request):
                 'id': ai_message.id, 'message': ai_message.message, 'is_admin': False, 'is_ai': True,
                 'created_at': ai_message.created_at.isoformat(),
             }
-    if 'ai_message' not in response:
+        else:
+            handoff_text = 'I could not confidently solve that question, so a support ticket has been registered. Customer care will review it and contact you. Please do not share passwords, payment details, or other private information here.'
+            handoff = ChatMessage.objects.create(user=user, name='Boldstone AI', email=user.email, message=handoff_text, is_ai=True)
+            response['ai_message'] = {
+                'id': handoff.id, 'message': handoff.message, 'is_admin': False, 'is_ai': True,
+                'created_at': handoff.created_at.isoformat(),
+            }
+            response['needs_admin'] = True
+    if not admin_has_replied and ('ai_message' not in response or response.get('needs_admin')):
         from email_service import send_chat_notification
         threading.Thread(target=send_chat_notification, args=(msg,), daemon=True).start()
     return JsonResponse(response)
@@ -303,7 +313,7 @@ def chat_stream(request):
             messages = ChatMessage.objects.filter(user=request.api_user, id__gt=last_id).order_by('id')
             if messages.exists():
                 for message in messages:
-                    yield f"data: {json.dumps({'id': message.id, 'message': message.message, 'is_admin': message.is_admin, 'is_ai': message.is_ai, 'created_at': message.created_at.isoformat()})}\n\n"
+                    yield f"data: {json.dumps({'id': message.id, 'message': message.message, 'is_admin': message.is_admin, 'is_ai': message.is_ai, 'admin_name': message.admin_name, 'admin_avatar': message.admin_avatar, 'created_at': message.created_at.isoformat()})}\n\n"
                 return
             yield ': keep-alive\n\n'
             time.sleep(2)

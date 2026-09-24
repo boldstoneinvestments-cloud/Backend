@@ -65,6 +65,32 @@ def quick_response(history):
         return None
     raw_question = history[-1].get('text', '')
     from .knowledge_engine import find_likely_answer, needs_problem_clarification
+    normalized_question = re.sub(r'[^a-z0-9 ]', '', raw_question.lower()).strip()
+    previous_ai = next((item.get('text', '') for item in reversed(history[:-1]) if item.get('role') == 'model'), '')
+    clarification_prompt = 'Could you tell me a little more about what happened?'
+    if normalized_question in {'give me that general problem', 'general problem', 'tell me the problem'}:
+        if 'What went wrong with the order' in previous_ai:
+            return 'Please tell me whether the order problem concerns payment, delivery, the product, the invoice, or something else. Do not share payment details or other private information.'
+        if 'What happened with the payment' in previous_ai:
+            return 'Please tell me whether the payment was declined, interrupted, or charged without confirmation. Do not share card numbers or payment details.'
+        if 'What happened with the lease application' in previous_ai:
+            return 'Please tell me whether you need general information, an application update, or help with the application form. Do not share private documents here.'
+        if 'What happened with the account' in previous_ai:
+            return 'Please tell me whether the issue is with sign-in, account creation, or chat access. Do not share your password.'
+        if 'Which website page or feature' in previous_ai:
+            return 'Please tell me which website page or feature is not working. Do not share passwords or other private information.'
+        return 'I can help narrow it down. Please choose one area: order, payment, lease application, account, or website. Then tell me what happened without sharing private information.'
+    if clarification_prompt in previous_ai:
+        category_followups = {
+            'order': 'Thanks for clarifying. What went wrong with the order: payment, delivery, product, invoice, or something else? Please do not share payment details or other private information.',
+            'payment': 'Thanks for clarifying. What happened with the payment: was it declined, interrupted, or charged without confirmation? Please do not share card numbers or payment details.',
+            'lease': 'Thanks for clarifying. What happened with the lease application: do you need general information, an application update, or help with the application form? Please do not share private documents here.',
+            'account': 'Thanks for clarifying. What happened with the account: sign-in, account creation, or chat access? Please do not share your password.',
+            'website': 'Thanks for clarifying. Which website page or feature is not working? Please do not share passwords or other private information.',
+        }
+        for category, reply in category_followups.items():
+            if re.search(rf'\b{category}\b', normalized_question):
+                return reply
     if needs_problem_clarification(raw_question):
         return 'I am sorry you are experiencing a problem. Could you tell me a little more about what happened? For example, is it related to an order, payment, lease application, account, or the website? Please do not share passwords, payment details, or other private information.'
     likely_answer = find_likely_answer(raw_question)
