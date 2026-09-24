@@ -6,6 +6,8 @@ urlpatterns = [
     path('logout', admin_views.logout_admin),
     path('users', admin_views.admin_users),
     path('users/<int:user_id>', admin_views.admin_user_detail),
+    path('customers', admin_views.admin_customers),
+    path('customers/<int:user_id>', admin_views.admin_customer_detail),
     path('orders', admin_views.admin_orders),
     path('orders/<str:order_id>', admin_views.admin_delete_order),
     path('lease-applications', admin_views.admin_lease_applications),

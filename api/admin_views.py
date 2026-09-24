@@ -22,6 +22,17 @@ def serialize_admin_user(user):
     }
 
 
+def serialize_customer_user(user):
+    return {
+        'id': user.id,
+        'name': user.get_full_name(),
+        'username': user.username,
+        'email': user.email,
+        'is_active': user.is_active,
+        'date_joined': user.date_joined.isoformat(),
+    }
+
+
 @csrf_exempt
 def login_admin(request):
     if request.method != 'POST':
@@ -132,6 +143,61 @@ def admin_user_detail(request, user_id):
         user.set_password(password)
     user.save()
     return JsonResponse({'success': True, 'user': serialize_admin_user(user)})
+
+
+@csrf_exempt
+@login_required
+def admin_customers(request):
+    if request.method == 'GET':
+        return JsonResponse({
+            'customers': [
+                serialize_customer_user(user)
+                for user in User.objects.filter(is_staff=False).order_by('first_name', 'last_name', 'email')
+            ],
+        })
+
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
+@csrf_exempt
+@login_required
+def admin_customer_detail(request, user_id):
+    if request.method != 'PUT':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    user = User.objects.filter(id=user_id, is_staff=False).first()
+    if user is None:
+        return JsonResponse({'error': 'Customer not found'}, status=404)
+
+    name = str(data.get('name', '')).strip()
+    username = str(data.get('username', '')).strip()
+    email = str(data.get('email', '')).strip()
+    password = str(data.get('password', ''))
+    is_active = data.get('is_active', user.is_active)
+    if not name or not username or not email:
+        return JsonResponse({'error': 'Name, username, and email are required'}, status=400)
+    if password and len(password) < 8:
+        return JsonResponse({'error': 'Password must be at least 8 characters'}, status=400)
+    if User.objects.filter(username=username).exclude(id=user.id).exists():
+        return JsonResponse({'error': 'That username is already in use'}, status=409)
+    if User.objects.filter(email__iexact=email).exclude(id=user.id).exists():
+        return JsonResponse({'error': 'That email is already in use'}, status=409)
+
+    name_parts = name.split(None, 1)
+    user.first_name = name_parts[0]
+    user.last_name = name_parts[1] if len(name_parts) > 1 else ''
+    user.username = username
+    user.email = email
+    user.is_active = bool(is_active)
+    if password:
+        user.set_password(password)
+    user.save()
+    return JsonResponse({'success': True, 'customer': serialize_customer_user(user)})
 
 
 @login_required
