@@ -366,11 +366,11 @@ def admin_chat_reply(request):
     email = str(data.get('email', '')).strip()
     message = str(data.get('message', '')).strip()
     admin_name = str(data.get('admin_name', '')).strip().upper()
-    upload = request.FILES.get('attachment')
+    uploads = request.FILES.getlist('attachment')
     admin_avatar = ADMIN_IDENTITIES.get(admin_name)
-    if upload and (upload.size > MAX_CHAT_FILE_SIZE or Path(upload.name).suffix.lower() not in ALLOWED_CHAT_EXTENSIONS):
+    if any(upload.size > MAX_CHAT_FILE_SIZE or Path(upload.name).suffix.lower() not in ALLOWED_CHAT_EXTENSIONS for upload in uploads):
         return JsonResponse({'error': 'Files must be images, documents, or text files smaller than 5 MB'}, status=400)
-    if not name or not email or (not message and not upload) or not admin_name:
+    if not name or not email or (not message and not uploads) or not admin_name:
         return JsonResponse({'error': 'Admin identity and message or attachment are required'}, status=400)
     if not admin_avatar:
         return JsonResponse({'error': 'Select a valid admin identity'}, status=400)
@@ -378,7 +378,21 @@ def admin_chat_reply(request):
     customer = User.objects.filter(email__iexact=email, is_staff=False).first()
     if customer is None:
         return JsonResponse({'error': 'Customer account not found'}, status=404)
-    reply = ChatMessage.objects.create(user=customer, name=customer.get_full_name(), email=customer.email, message=message, is_admin=True, admin_name=admin_name, admin_avatar=admin_avatar, attachment=upload)
+    replies = [ChatMessage.objects.create(user=customer, name=customer.get_full_name(), email=customer.email, message=message if index == 0 else '', is_admin=True, admin_name=admin_name, admin_avatar=admin_avatar, attachment=upload) for index, upload in enumerate(uploads or [None])]
+    reply = replies[0]
+    serialized = [{
+        'id': item.id,
+        'name': item.name,
+        'email': item.email,
+        'message': item.message,
+        'is_admin': item.is_admin,
+        'is_ai': item.is_ai,
+        'admin_name': item.admin_name,
+        'admin_avatar': item.admin_avatar,
+        'attachment_url': f'/api/chat/attachments/{item.id}' if item.attachment else '',
+        'attachment_name': item.attachment.name.rsplit('/', 1)[-1] if item.attachment else '',
+        'created_at': item.created_at.isoformat(),
+    } for item in replies]
     return JsonResponse({
         'success': True,
         'message': {
@@ -390,10 +404,11 @@ def admin_chat_reply(request):
             'is_ai': reply.is_ai,
             'admin_name': reply.admin_name,
             'admin_avatar': reply.admin_avatar,
-            'attachment_url': f'/api/chat/attachments/{reply.id}' if reply.attachment else '',
-            'attachment_name': reply.attachment.name.rsplit('/', 1)[-1] if reply.attachment else '',
+            'attachment_url': serialized[0]['attachment_url'],
+            'attachment_name': serialized[0]['attachment_name'],
             'created_at': reply.created_at.isoformat(),
         },
+        'messages': serialized,
     }, status=201)
 
 

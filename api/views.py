@@ -303,15 +303,16 @@ def chat(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     message_text = str((data or {}).get('message', '') if data is not None else request.POST.get('message', '')).strip()
-    upload = request.FILES.get('attachment')
-    if not message_text and not upload:
+    uploads = request.FILES.getlist('attachment')
+    if not message_text and not uploads:
         return JsonResponse({'error': 'Message or attachment is required'}, status=400)
-    if upload:
+    for upload in uploads:
         from pathlib import Path
         if upload.size > MAX_CHAT_FILE_SIZE or Path(upload.name).suffix.lower() not in ALLOWED_CHAT_EXTENSIONS:
             return JsonResponse({'error': 'Files must be images, documents, or text files smaller than 5 MB'}, status=400)
-    msg = ChatMessage.objects.create(user=user, name=user.get_full_name(), email=user.email, message=message_text, is_admin=False, attachment=upload)
-    response = {'success': True, 'message': chat_message_payload(msg)}
+    messages = [ChatMessage.objects.create(user=user, name=user.get_full_name(), email=user.email, message=message_text if index == 0 else '', is_admin=False, attachment=upload) for index, upload in enumerate(uploads or [None])]
+    msg = messages[0]
+    response = {'success': True, 'message': chat_message_payload(msg), 'messages': [chat_message_payload(item) for item in messages]}
 
     admin_has_replied = ChatMessage.objects.filter(user=user, is_admin=True).exists()
     if not admin_has_replied:
