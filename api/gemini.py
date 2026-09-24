@@ -1,8 +1,11 @@
 import json
+import logging
 import os
 import re
 import urllib.error
 import urllib.request
+
+logger = logging.getLogger(__name__)
 
 
 KNOWLEDGE_BASE = '''
@@ -27,6 +30,7 @@ def redact_private_text(value):
 def generate_supported_reply(history):
     api_key = os.getenv('GEMINI_API_KEY', '').strip()
     if not api_key:
+        logger.warning('Boldstone AI is disabled: GEMINI_API_KEY is not configured.')
         return None
 
     safe_history = [
@@ -52,8 +56,9 @@ CONVERSATION:
         'contents': [{'parts': [{'text': prompt}]}],
         'generationConfig': {'temperature': 0.1, 'maxOutputTokens': 220},
     }).encode('utf-8')
+    model = os.getenv('GEMINI_MODEL', 'gemini-3.5-flash-lite').strip()
     request = urllib.request.Request(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+        f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
         data=payload,
         headers={'Content-Type': 'application/json', 'x-goog-api-key': api_key},
         method='POST',
@@ -61,7 +66,11 @@ CONVERSATION:
     try:
         with urllib.request.urlopen(request, timeout=8) as response:
             result = json.loads(response.read().decode('utf-8'))
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError):
+    except urllib.error.HTTPError as error:
+        logger.error('Boldstone AI API returned HTTP %s: %s', error.code, error.read().decode('utf-8', errors='replace')[:500])
+        return None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+        logger.error('Boldstone AI request failed: %s', error)
         return None
 
     text = ''.join(part.get('text', '') for part in result.get('candidates', [{}])[0].get('content', {}).get('parts', []))
