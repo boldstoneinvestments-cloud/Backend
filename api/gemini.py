@@ -56,21 +56,28 @@ CONVERSATION:
         'contents': [{'parts': [{'text': prompt}]}],
         'generationConfig': {'temperature': 0.1, 'maxOutputTokens': 220},
     }).encode('utf-8')
-    model = os.getenv('GEMINI_MODEL', 'gemini-3.5-flash-lite').strip()
-    request = urllib.request.Request(
-        f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
-        data=payload,
-        headers={'Content-Type': 'application/json', 'x-goog-api-key': api_key},
-        method='POST',
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=8) as response:
-            result = json.loads(response.read().decode('utf-8'))
-    except urllib.error.HTTPError as error:
-        logger.error('Boldstone AI API returned HTTP %s: %s', error.code, error.read().decode('utf-8', errors='replace')[:500])
-        return None
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
-        logger.error('Boldstone AI request failed: %s', error)
+    configured_model = os.getenv('GEMINI_MODEL', 'gemini-3.8-flash').strip()
+    models = list(dict.fromkeys([configured_model, 'gemini-3.6-flash', 'gemini-3.5-flash-lite']))
+    result = None
+    for model in models:
+        request = urllib.request.Request(
+            f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
+            data=payload,
+            headers={'Content-Type': 'application/json', 'x-goog-api-key': api_key},
+            method='POST',
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                result = json.loads(response.read().decode('utf-8'))
+            break
+        except urllib.error.HTTPError as error:
+            error_body = error.read().decode('utf-8', errors='replace')[:500]
+            logger.warning('Boldstone AI model %s returned HTTP %s: %s', model, error.code, error_body)
+            continue
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            logger.warning('Boldstone AI model %s failed: %s', model, error)
+
+    if result is None:
         return None
 
     text = ''.join(part.get('text', '') for part in result.get('candidates', [{}])[0].get('content', {}).get('parts', []))
