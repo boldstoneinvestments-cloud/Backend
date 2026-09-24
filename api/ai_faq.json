@@ -33,5 +33,65 @@
     "intent": "farming_inclusions",
     "keywords": ["include", "included", "service", "services", "seedling", "management", "agronomy", "maintenance"],
     "answer": "Depending on the selected plan, the program may include land access, coffee seedling establishment, indigenous shade tree seedlings, farm management, agronomy supervision, maintenance, and monitoring."
+  },
+  {
+    "intent": "monthly_after_first_year",
+    "keywords": ["monthly", "after", "year", "renew", "continued", "access"],
+    "answer": "After Year 1, the monthly subscription reduces to US$19.99 per month or US$239.88 per year for continued land access, farm management, and agronomy support."
+  },
+  {
+    "intent": "annual_renewal",
+    "keywords": ["annual", "renew", "renewal", "year", "subscription"],
+    "answer": "Subscriptions can be renewed in future years to continue receiving land access, farm management, agronomy support, and ongoing maintenance as the coffee farm matures."
+  },
+  {
+    "intent": "sustainable_farming",
+    "keywords": ["sustainable", "sustainability", "agroforestry", "shade", "trees", "soil", "biodiversity"],
+    "answer": "Boldstone is developing a regenerative agroforestry coffee estate that integrates native shade trees with coffee production. This approach helps regulate microclimates, improve soil health, retain moisture, enhance biodiversity, and reduce heat-related pest pressure."
+  },
+  {
+    "intent": "visit_and_updates",
+    "keywords": ["visit", "farm", "updates", "photographs", "photos", "progress", "report"],
+    "answer": "Subscribers are welcome to visit the farm by appointment. Boldstone provides periodic updates, including photographs, planting progress, agronomy activities, and seasonal production reports."
+  },
+  {
+    "intent": "harvest_aftercare",
+    "keywords": ["what", "happens", "after", "harvest", "harvested", "postharvest", "market", "coffee", "revenue"],
+    "answer": "Boldstone provides harvest coordination, post-harvest handling support, and market linkage services through its coffee network. Detailed harvesting and revenue arrangements are outlined in the subscriber agreement."
+  },
+  {
+    "intent": "farmer_support",
+    "keywords": ["farmer", "support", "agronomy", "advice", "pest", "disease", "market", "prices"],
+    "answer": "Boldstone's farmer platform provides farming advice, pest and disease management guidance, best-practice support, farmer community access, market information, and direct market access."
+  },
+  {
+    "intent": "ngo_partnership",
+    "keywords": ["ngo", "nonprofit", "nonprofit", "partnership", "coffee", "farms", "revenue"],
+    "answer": "Boldstone can work with NGOs and non-profits to establish coffee farms that generate revenue and support long-term sustainability."
+  },
+  {
+    "intent": "influencer_partnership",
+    "keywords": ["influencer", "promote", "partner", "partnership", "audience", "social", "media"],
+    "answer": "Influencers can partner with Boldstone by educating their audiences about coffee farming and trade and helping grow awareness of Boldstone's work."
+  },
+  {
+    "intent": "partnership_location",
+    "keywords": ["partnership", "operations", "located", "location", "uganda", "fort", "portal", "kabarole", "kyegegwa", "kyenjojo", "kamwenge"],
+    "answer": "Boldstone is primarily located in Fort Portal, Uganda, with farming and trade operations extending to Kabarole, Kyegegwa, Kyenjojo, and Kamwenge."
+  },
+  {
+    "intent": "partnership_requirements",
+    "keywords": ["partner", "partnership", "become", "requirements", "identification", "value"],
+    "answer": "To become a Boldstone partner, you need proof of identification as a business or individual and the value you would like to create with Boldstone."
+  },
+  {
+    "intent": "speak_to_admin",
+    "keywords": ["human", "person", "admin", "agent", "representative", "talk", "speak", "contact"],
+    "answer": "Of course. Your message has been sent to Boldstone support, and an admin can join the conversation to assist you personally."
+  },
+  {
+    "intent": "customer_problem",
+    "keywords": ["problem", "issue", "error", "failed", "failure", "not", "working", "complaint", "help", "order", "payment"],
+    "answer": "I am sorry you are experiencing a problem. I can provide general information, and your message has been sent to Boldstone support so an admin can review and assist you."
   }
 ]

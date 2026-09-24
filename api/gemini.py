@@ -64,7 +64,9 @@ def quick_response(history):
     if not history or history[-1].get('role') != 'user':
         return None
     raw_question = history[-1].get('text', '')
-    from .knowledge_engine import find_likely_answer
+    from .knowledge_engine import find_likely_answer, needs_problem_clarification
+    if needs_problem_clarification(raw_question):
+        return 'I am sorry you are experiencing a problem. Could you tell me a little more about what happened? For example, is it related to an order, payment, lease application, account, or the website? Please do not share passwords, payment details, or other private information.'
     likely_answer = find_likely_answer(raw_question)
     if likely_answer:
         return likely_answer
@@ -84,9 +86,9 @@ def generate_supported_reply(history):
     if instant_reply:
         return instant_reply
 
-    api_key = os.getenv('GEMINI_API_KEY', '').strip()
+    api_key = os.getenv('OPENAI_API_KEY', '').strip()
     if not api_key:
-        logger.warning('Boldstone AI is disabled: GEMINI_API_KEY is not configured.')
+        logger.warning('Boldstone AI remote fallback is disabled: OPENAI_API_KEY is not configured.')
         return None
 
     safe_history = [
@@ -113,33 +115,34 @@ CONVERSATION:
 {json.dumps(safe_history, ensure_ascii=False)}
 '''
     payload = json.dumps({
-        'contents': [{'parts': [{'text': prompt}]}],
-        'generationConfig': {'temperature': 0.1, 'maxOutputTokens': 220},
+        'model': os.getenv('OPENAI_MODEL', 'gpt-4o-mini').strip(),
+        'messages': [
+            {'role': 'system', 'content': prompt},
+            *[
+                {'role': 'assistant' if item['role'] == 'model' else 'user', 'content': redact_private_text(item['text'])}
+                for item in safe_history
+            ],
+        ],
+        'temperature': 0.1,
+        'max_tokens': 220,
     }).encode('utf-8')
-    configured_model = os.getenv('GEMINI_MODEL', 'gemini-3.8-flash').strip()
-    models = list(dict.fromkeys([configured_model, 'gemini-3.6-flash', 'gemini-3.5-flash-lite']))
-    result = None
-    for model in models:
-        request = urllib.request.Request(
-            f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
-            data=payload,
-            headers={'Content-Type': 'application/json', 'x-goog-api-key': api_key},
-            method='POST',
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                result = json.loads(response.read().decode('utf-8'))
-            break
-        except urllib.error.HTTPError as error:
-            error_body = error.read().decode('utf-8', errors='replace')[:500]
-            logger.warning('Boldstone AI model %s returned HTTP %s: %s', model, error.code, error_body)
-            continue
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
-            logger.warning('Boldstone AI model %s failed: %s', model, error)
-
-    if result is None:
+    request = urllib.request.Request(
+        'https://api.openai.com/v1/chat/completions',
+        data=payload,
+        headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            result = json.loads(response.read().decode('utf-8'))
+    except urllib.error.HTTPError as error:
+        error_body = error.read().decode('utf-8', errors='replace')[:500]
+        logger.error('Boldstone AI OpenAI API returned HTTP %s: %s', error.code, error_body)
+        return None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+        logger.error('Boldstone AI OpenAI request failed: %s', error)
         return None
 
-    text = ''.join(part.get('text', '') for part in result.get('candidates', [{}])[0].get('content', {}).get('parts', []))
+    text = result.get('choices', [{}])[0].get('message', {}).get('content', '')
     text = text.strip()
     return None if not text or text == 'NO_ANSWER' else text

@@ -262,8 +262,6 @@ def chat(request):
     if not data or not data.get('message'):
         return JsonResponse({'error': 'Missing required fields'}, status=400)
     msg = ChatMessage.objects.create(user=user, name=user.get_full_name(), email=user.email, message=data['message'], is_admin=False)
-    from email_service import send_chat_notification
-    threading.Thread(target=send_chat_notification, args=(msg,), daemon=True).start()
     response = {'success': True, 'message': {
         'id': msg.id, 'message': msg.message, 'is_admin': False,
         'created_at': msg.created_at.isoformat(),
@@ -283,6 +281,9 @@ def chat(request):
                 'id': ai_message.id, 'message': ai_message.message, 'is_admin': False, 'is_ai': True,
                 'created_at': ai_message.created_at.isoformat(),
             }
+    if 'ai_message' not in response:
+        from email_service import send_chat_notification
+        threading.Thread(target=send_chat_notification, args=(msg,), daemon=True).start()
     return JsonResponse(response)
 
 
