@@ -28,6 +28,35 @@ ESTATE = {
 User = get_user_model()
 
 
+def chat_history_for(user):
+    return [
+        {'role': 'model' if item.is_admin or item.is_ai else 'user', 'text': item.message}
+        for item in list(ChatMessage.objects.filter(user=user).order_by('-created_at')[:12])[::-1]
+    ]
+
+
+def process_chat_ai_followup(user_id, message_id):
+    user = User.objects.filter(id=user_id, is_active=True, is_staff=False).first()
+    message = ChatMessage.objects.filter(id=message_id, user_id=user_id).first()
+    if user is None or message is None or ChatMessage.objects.filter(user=user, is_admin=True).exists():
+        return
+
+    from .gemini import generate_supported_reply
+    ai_text = generate_supported_reply(chat_history_for(user))
+    if ChatMessage.objects.filter(user=user, is_admin=True).exists():
+        return
+
+    if ai_text:
+        ChatMessage.objects.create(user=user, name='Boldstone AI', email=user.email, message=ai_text, is_ai=True)
+        return
+
+    handoff_text = 'I could not confidently solve that question, so a support ticket has been registered. Customer care will review it and contact you. Please do not share passwords, payment details, or other private information here.'
+    ChatMessage.objects.create(user=user, name='Boldstone AI', email=user.email, message=handoff_text, is_ai=True)
+    if not ChatMessage.objects.filter(user=user, is_admin=True).exists():
+        from email_service import send_chat_notification
+        threading.Thread(target=send_chat_notification, args=(message,), kwargs={'ticket': True}, daemon=True).start()
+
+
 def customer_token(user):
     return signing.dumps({'user_id': user.id}, salt='customer-auth')
 
@@ -271,29 +300,12 @@ def chat(request):
 
     admin_has_replied = ChatMessage.objects.filter(user=user, is_admin=True).exists()
     if not admin_has_replied:
-        from .gemini import generate_supported_reply
-        history = [
-            {'role': 'model' if item.is_admin or item.is_ai else 'user', 'text': item.message}
-            for item in list(ChatMessage.objects.filter(user=user).order_by('-created_at')[:12])[::-1]
-        ]
-        ai_text = generate_supported_reply(history)
-        if ai_text:
-            ai_message = ChatMessage.objects.create(user=user, name='Boldstone AI', email=user.email, message=ai_text, is_ai=True)
-            response['ai_message'] = {
-                'id': ai_message.id, 'message': ai_message.message, 'is_admin': False, 'is_ai': True,
-                'created_at': ai_message.created_at.isoformat(),
-            }
+        from .gemini import quick_response
+        local_reply = quick_response(chat_history_for(user))
+        if local_reply:
+            ChatMessage.objects.create(user=user, name='Boldstone AI', email=user.email, message=local_reply, is_ai=True)
         else:
-            handoff_text = 'I could not confidently solve that question, so a support ticket has been registered. Customer care will review it and contact you. Please do not share passwords, payment details, or other private information here.'
-            handoff = ChatMessage.objects.create(user=user, name='Boldstone AI', email=user.email, message=handoff_text, is_ai=True)
-            response['ai_message'] = {
-                'id': handoff.id, 'message': handoff.message, 'is_admin': False, 'is_ai': True,
-                'created_at': handoff.created_at.isoformat(),
-            }
-            response['needs_admin'] = True
-    if not admin_has_replied and ('ai_message' not in response or response.get('needs_admin')):
-        from email_service import send_chat_notification
-        threading.Thread(target=send_chat_notification, args=(msg,), daemon=True).start()
+            threading.Thread(target=process_chat_ai_followup, args=(user.id, msg.id), daemon=True).start()
     return JsonResponse(response)
 
 

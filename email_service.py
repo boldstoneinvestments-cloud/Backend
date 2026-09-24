@@ -9,7 +9,7 @@ LOGO_URL = 'https://res.cloudinary.com/cwj8d38f/image/upload/v1789729870/Boldsto
 ADMIN_ORDER_EMAIL = os.getenv('RESEND_ADMIN_EMAIL', 'boldstone.investments@gmail.com').strip()
 
 
-def send_chat_notification(msg):
+def send_chat_notification(msg, ticket=False):
     api_key = os.getenv('RESEND_API_KEY', '').strip()
     from_email = os.getenv('RESEND_FROM_EMAIL', '').strip()
     from_name = os.getenv('RESEND_FROM_NAME', 'Boldstone Investments Team').strip()
@@ -24,11 +24,13 @@ def send_chat_notification(msg):
     message = html.escape(msg.message)
     sender = f'{from_name} <{from_email}>'
     try:
+        subject = f"Support ticket #{msg.id} from {msg.name} — Boldstone Website" if ticket else f"New chat message from {msg.name} — Boldstone Website"
+        heading = 'A support ticket has been registered from the website.' if ticket else 'A new chat message has been received through the website.'
         resend.Emails.send({
             'from': sender,
             'to': [ADMIN_ORDER_EMAIL],
             'reply_to': msg.email,
-            'subject': f'New chat message from {msg.name} — Boldstone Website',
+            'subject': subject,
             'html': f'''
                 <div style="font-family:Arial,sans-serif;color:#173b34;line-height:1.6;max-width:600px;margin:0 auto;">
                     <div style="padding:8px 0 24px;text-align:center;border-bottom:1px solid #dceae6;">
@@ -36,7 +38,8 @@ def send_chat_notification(msg):
                             style="display:block;width:110px;height:110px;max-width:100%;margin:0 auto;border-radius:50%;object-fit:cover;" />
                     </div>
                     <p style="margin-top:28px;">Hello Boldstone Investments Team,</p>
-                    <p>A new chat message has been received through the website.</p>
+                    <p>{heading}</p>
+                    {'<p><strong>Ticket ID:</strong> #' + str(msg.id) + '</p>' if ticket else ''}
                     <table style="width:100%;border-collapse:collapse;border:1px solid #dceae6;margin:20px 0;">
                         <tr><td style="padding:10px 14px;background:#edf7f4;font-weight:700;width:120px;">Name</td><td style="padding:10px 14px;border-left:1px solid #dceae6;">{name}</td></tr>
                         <tr><td style="padding:10px 14px;background:#edf7f4;font-weight:700;">Email</td><td style="padding:10px 14px;border-left:1px solid #dceae6;"><a href="mailto:{email}" style="color:#0f8972;">{email}</a></td></tr>
