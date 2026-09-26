@@ -162,6 +162,7 @@ class PasswordResetTests(TestCase):
         )
         self.assertEqual(login_response.status_code, 200)
         self.assertTrue(login_response.json()['identity_selection_required'])
+        self.assertEqual(len(login_response.json()['identities']), 3)
         session = self.client.get('/api/admin/session')
         self.assertEqual(session.status_code, 200)
         self.assertTrue(session.json()['authenticated'])
@@ -208,6 +209,31 @@ class PasswordResetTests(TestCase):
             self.assertEqual(verified.json()['identity_name'], identity_name)
 
         self.assertEqual(TOTPDevice.objects.filter(user=self.admin, confirmed=True).count(), 3)
+
+    def test_admin_recovery_code_is_hashed_and_single_use(self):
+        enrollment = self.authenticate_admin_with_totp()
+        recovery_code = enrollment.json()['recovery_codes'][0]
+        recovery = self.admin.admin_recovery_codes
+        self.assertTrue(all(value.startswith('hmac-sha256$') for value in recovery.identity_code_hashes['SSEMATA SABIRA']))
+        self.client.logout()
+
+        selected = self.start_admin_identity_setup('SSEMATA SABIRA')
+        self.assertFalse(selected.json()['setup_required'])
+        verified = self.client.post(
+            '/api/admin/2fa/verify',
+            {'recovery_code': recovery_code},
+            content_type='application/json',
+        )
+        self.assertEqual(verified.status_code, 200)
+
+        self.client.logout()
+        self.start_admin_identity_setup('SSEMATA SABIRA')
+        reused = self.client.post(
+            '/api/admin/2fa/verify',
+            {'recovery_code': recovery_code},
+            content_type='application/json',
+        )
+        self.assertEqual(reused.status_code, 400)
 
     def test_selected_identity_stamps_chat_and_page_activity(self):
         self.authenticate_admin_with_totp('SSEMATA SABIRA')

@@ -118,7 +118,15 @@ def login_admin(request):
     request.session.pop(VERIFIED_SESSION_KEY, None)
     request.session.pop('admin_identity_name', None)
     request.session.modified = True
-    return JsonResponse({'success': True, 'identity_selection_required': True})
+    return JsonResponse({
+        'success': True,
+        'identity_selection_required': True,
+        'username': user.username,
+        'identities': [
+            {'name': name, 'avatar': avatar}
+            for name, avatar in ADMIN_IDENTITIES.items()
+        ],
+    })
 
 
 @csrf_exempt
