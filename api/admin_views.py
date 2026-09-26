@@ -118,15 +118,25 @@ def login_admin(request):
     request.session.pop(VERIFIED_SESSION_KEY, None)
     request.session.pop('admin_identity_name', None)
     request.session.modified = True
-    return JsonResponse({
+    response_data = {
         'success': True,
-        'identity_selection_required': True,
         'username': user.username,
         'identities': [
             {'name': name, 'avatar': avatar}
             for name, avatar in ADMIN_IDENTITIES.items()
         ],
-    })
+    }
+    remembered_identity = AdminPresence.objects.filter(user=user).values_list('identity_name', flat=True).first()
+    if remembered_identity in ADMIN_IDENTITIES:
+        response_data.update({
+            'identity_selection_required': False,
+            'two_factor_required': True,
+            'pending_identity': identity_payload(remembered_identity),
+            'two_factor': begin_admin_two_factor(request, user, remembered_identity),
+        })
+    else:
+        response_data['identity_selection_required'] = True
+    return JsonResponse(response_data)
 
 
 @csrf_exempt

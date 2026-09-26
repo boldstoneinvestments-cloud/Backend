@@ -190,6 +190,28 @@ class PasswordResetTests(TestCase):
         self.assertEqual(len(verified.json()['recovery_codes']), 10)
         self.assertEqual(self.client.get('/api/admin/session').json()['identity']['name'], 'SSEMATA SABIRA')
 
+    def test_repeat_admin_signin_uses_remembered_identity_without_selection(self):
+        self.authenticate_admin_with_totp('MOSES ALICWAMU')
+        self.client.logout()
+
+        response = self.client.post(
+            '/api/admin/login',
+            {'username': self.admin.username, 'password': 'old-admin-password'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()['identity_selection_required'])
+        self.assertTrue(response.json()['two_factor_required'])
+        self.assertEqual(response.json()['pending_identity']['name'], 'MOSES ALICWAMU')
+        self.assertFalse(response.json()['two_factor']['setup_required'])
+
+        device = TOTPDevice.objects.get(user=self.admin, name='admin:MOSES ALICWAMU')
+        timestamp = int(time.time()) + 120
+        verified = self.verify_admin_code(self.totp_code(device, timestamp), timestamp)
+        self.assertEqual(verified.status_code, 200)
+        self.assertEqual(self.client.get('/api/admin/session').json()['identity']['name'], 'MOSES ALICWAMU')
+
     def test_each_admin_identity_requires_independent_totp_setup(self):
         for index, identity_name in enumerate(('SSEMATA SABIRA', 'MOSES ALICWAMU', 'HABIB TUMWESIGE')):
             if index == 0:
