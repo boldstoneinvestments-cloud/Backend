@@ -1,9 +1,13 @@
 from django.urls import path
 from . import admin_views
+from . import views
 
 urlpatterns = [
     path('login', admin_views.login_admin),
     path('logout', admin_views.logout_admin),
+    path('password-reset', views.request_admin_password_reset),
+    path('password-reset/confirm', views.confirm_admin_password_reset),
+    path('google/start', views.google_start_admin),
     path('users', admin_views.admin_users),
     path('users/<int:user_id>', admin_views.admin_user_detail),
     path('customers', admin_views.admin_customers),

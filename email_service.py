@@ -9,6 +9,39 @@ LOGO_URL = 'https://res.cloudinary.com/cwj8d38f/image/upload/v1789729870/Boldsto
 ADMIN_ORDER_EMAIL = os.getenv('RESEND_ADMIN_EMAIL', 'boldstone.investments@gmail.com').strip()
 
 
+def send_password_reset_email(user, reset_url):
+    api_key = os.getenv('RESEND_API_KEY', '').strip()
+    from_email = os.getenv('RESEND_FROM_EMAIL', '').strip()
+    from_name = os.getenv('RESEND_FROM_NAME', 'Boldstone Investments Team').strip()
+    if not api_key or not from_email:
+        logger.error('Password reset email skipped: RESEND_API_KEY and RESEND_FROM_EMAIL must be configured.')
+        return False
+
+    resend.api_key = api_key
+    name = html.escape(user.get_full_name() or user.username)
+    safe_url = html.escape(reset_url, quote=True)
+    try:
+        resend.Emails.send({
+            'from': f'{from_name} <{from_email}>',
+            'to': [user.email],
+            'subject': 'Reset your Boldstone password',
+            'html': f'''
+                <div style="font-family:Arial,sans-serif;color:#173b34;line-height:1.6;max-width:600px;margin:0 auto;">
+                    <p>Hello {name},</p>
+                    <p>We received a request to reset your Boldstone password. Use the link below to choose a new password. This link expires after a short time and can only be used once.</p>
+                    <p><a href="{safe_url}" style="display:inline-block;padding:12px 20px;background:#0f8972;color:#fff;text-decoration:none;font-weight:700;border-radius:6px;">Reset password</a></p>
+                    <p>If you did not request this change, you can ignore this email. Your password will remain unchanged.</p>
+                    <p>Boldstone Investments</p>
+                </div>
+            ''',
+            'text': f'Hello {user.get_full_name() or user.username},\n\nReset your Boldstone password using this link: {reset_url}\n\nIf you did not request this change, ignore this email.',
+        })
+        return True
+    except Exception:
+        logger.exception('Unable to send password reset email.')
+        return False
+
+
 def send_chat_notification(msg, ticket=False):
     api_key = os.getenv('RESEND_API_KEY', '').strip()
     from_email = os.getenv('RESEND_FROM_EMAIL', '').strip()

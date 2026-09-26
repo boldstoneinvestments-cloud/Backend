@@ -8,6 +8,8 @@ urlpatterns = [
     path('account/me', views.account_me),
     path('account/sign-out', views.account_logout),
     path('account/csrf', views.account_csrf),
+    path('account/password-reset', views.request_password_reset),
+    path('account/password-reset/confirm', views.confirm_password_reset),
     path('account/google/start', views.google_start),
     path('account/google/callback', views.google_callback),
     path('estate', views.estate),
