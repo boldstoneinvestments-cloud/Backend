@@ -17,6 +17,8 @@ INSTALLED_APPS = [
 	'django.contrib.sessions',
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
+	'django_otp',
+	'django_otp.plugins.otp_totp',
 	'api',
 	'shop',
 ]
@@ -27,6 +29,7 @@ MIDDLEWARE = [
 	'django.middleware.common.CommonMiddleware',
 	'django.middleware.csrf.CsrfViewMiddleware',
 	'django.contrib.auth.middleware.AuthenticationMiddleware',
+	'config.middleware.RequireAdminTwoFactorMiddleware',
 	'django.contrib.messages.middleware.MessageMiddleware',
 ]
 ROOT_URLCONF = 'config.urls'
@@ -65,6 +68,7 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', '1') == '1'
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'webmaster@localhost')
 EMAIL_TO = os.getenv('EMAIL_TO', '')
+OTP_TOTP_ISSUER = 'Boldstone Investments'
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')

@@ -9,6 +9,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
+from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_KEY, admin_two_factor_status as get_admin_two_factor_status, begin_admin_two_factor, complete_admin_two_factor
 from .models import AdminActivity, AdminPresence, ChatMessage, LeaseApplication, Order
 from shop.models import ShopOrder
 
@@ -24,13 +25,19 @@ ADMIN_IDENTITIES = {
 }
 
 
-def staff_required(view):
+def staff_required(view=None, allow_identity_selection=False):
+    if view is None:
+        return lambda decorated_view: staff_required(decorated_view, allow_identity_selection)
+
     @wraps(view)
     def wrapped(request, *args, **kwargs):
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Admin sign in required'}, status=401)
         if not request.user.is_active or not request.user.is_staff:
             return JsonResponse({'error': 'Admin access required'}, status=403)
+        if not request.session.get(VERIFIED_SESSION_KEY):
+            if not allow_identity_selection or not request.session.get(IDENTITY_SELECTION_SESSION_KEY):
+                return JsonResponse({'error': 'Choose an admin identity and complete two-factor verification'}, status=401)
         return view(request, *args, **kwargs)
     return wrapped
 
@@ -42,6 +49,8 @@ def admin_required(view):
             return JsonResponse({'error': 'Admin sign in required'}, status=401)
         if not request.user.is_active or not request.user.is_staff:
             return JsonResponse({'error': 'Admin access required'}, status=403)
+        if not request.session.get(VERIFIED_SESSION_KEY):
+            return JsonResponse({'error': 'Admin two-factor verification required'}, status=401)
         if request.session.get('admin_identity_name') not in ADMIN_IDENTITIES:
             return JsonResponse({'error': 'Choose your admin identity first'}, status=409)
         return view(request, *args, **kwargs)
@@ -105,27 +114,68 @@ def login_admin(request):
     if user is None or not user.is_staff:
         return JsonResponse({'error': 'Invalid admin credentials'}, status=401)
     login(request, user)
-    return JsonResponse({'success': True, 'username': user.username})
+    request.session[IDENTITY_SELECTION_SESSION_KEY] = True
+    request.session.pop(VERIFIED_SESSION_KEY, None)
+    request.session.pop('admin_identity_name', None)
+    request.session.modified = True
+    return JsonResponse({'success': True, 'identity_selection_required': True})
 
 
-@staff_required
+@csrf_exempt
+def admin_two_factor_status(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse(get_admin_two_factor_status(request))
+
+
+@csrf_exempt
+def verify_admin_two_factor(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    user, result, status = complete_admin_two_factor(
+        request,
+        token=data.get('token', ''),
+        recovery_code=data.get('recovery_code', ''),
+    )
+    if status == 200:
+        identity_name = result['identity_name']
+        AdminPresence.objects.update_or_create(
+            user=user,
+            defaults={'identity_name': identity_name, 'identity_avatar': ADMIN_IDENTITIES[identity_name]},
+        )
+        log_admin_activity(
+            request,
+            'Selected admin identity',
+            target_type='identity',
+            target_id=identity_name,
+            identity_name=identity_name,
+        )
+    return JsonResponse(result, status=status)
+
+
+@staff_required(allow_identity_selection=True)
 def admin_session(request):
     identity_name = request.session.get('admin_identity_name', '')
     return JsonResponse({
         'authenticated': True,
         'username': request.user.username,
-        'identity': identity_payload(identity_name),
+        'identity': identity_payload(identity_name) if request.session.get(VERIFIED_SESSION_KEY) else None,
         'identities': [{'name': name, 'avatar': avatar} for name, avatar in ADMIN_IDENTITIES.items()],
     })
 
 
 @csrf_exempt
-@staff_required
+@staff_required(allow_identity_selection=True)
 def admin_identity(request):
     if request.method == 'GET':
         return JsonResponse({
-            'identity': identity_payload(request.session.get('admin_identity_name', '')),
+            'identity': identity_payload(request.session.get('admin_identity_name', '')) if request.session.get(VERIFIED_SESSION_KEY) else None,
             'identities': [{'name': name, 'avatar': avatar} for name, avatar in ADMIN_IDENTITIES.items()],
+            'two_factor': get_admin_two_factor_status(request),
         })
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -139,6 +189,14 @@ def admin_identity(request):
     if identity_name and identity_name not in ADMIN_IDENTITIES:
         return JsonResponse({'error': 'Choose a valid admin identity'}, status=400)
     if identity_name:
+        if not request.session.get(VERIFIED_SESSION_KEY) or identity_name != previous_identity:
+            request.session.pop(VERIFIED_SESSION_KEY, None)
+            request.session.pop('admin_identity_name', None)
+            request.session[IDENTITY_SELECTION_SESSION_KEY] = True
+            return JsonResponse({
+                'two_factor_required': True,
+                **begin_admin_two_factor(request, request.user, identity_name),
+            })
         request.session['admin_identity_name'] = identity_name
         AdminPresence.objects.update_or_create(
             user=request.user,
@@ -156,13 +214,15 @@ def admin_identity(request):
 
     if previous_identity:
         log_admin_activity(request, 'Cleared admin identity', target_type='identity', target_id=previous_identity)
+    request.session.pop(VERIFIED_SESSION_KEY, None)
+    request.session[IDENTITY_SELECTION_SESSION_KEY] = True
     request.session.pop('admin_identity_name', None)
     AdminPresence.objects.filter(user=request.user).update(identity_name='', identity_avatar='')
     return JsonResponse({'identity': None})
 
 
 @csrf_exempt
-@staff_required
+@staff_required(allow_identity_selection=True)
 def logout_admin(request):
     if request.session.get('admin_identity_name'):
         log_admin_activity(request, 'Signed out', 'admin session', request.user.username)

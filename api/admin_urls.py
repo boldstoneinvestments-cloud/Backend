@@ -4,6 +4,8 @@ from . import views
 
 urlpatterns = [
     path('login', admin_views.login_admin),
+    path('2fa/status', admin_views.admin_two_factor_status),
+    path('2fa/verify', admin_views.verify_admin_two_factor),
     path('session', admin_views.admin_session),
     path('identity', admin_views.admin_identity),
     path('logout', admin_views.logout_admin),

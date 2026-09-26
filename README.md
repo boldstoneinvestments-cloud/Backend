@@ -1,7 +1,6 @@
 # Boldstone Django backend
 
 ```powershell
-cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
@@ -14,9 +13,11 @@ API endpoints: `GET /api/health`, `GET /api/estate`, `POST /api/estate/invest`, 
 
 ## Railway
 
-Create a Railway service from this repository with the service root directory set to `backend`. Railway will use `railway.toml` to run migrations and start Gunicorn. Set `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS` in the Railway service variables.
+Create the Railway service from this repository with the service root directory set to the repository root (leave the root directory unset). `manage.py`, `requirements.txt`, and `railway.toml` are at the repository root. Railway will use `railway.toml` to run migrations and start Gunicorn. Set `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS` in the Railway service variables.
 
 Set `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in Railway variables. The deployment creates the admin account automatically, and you can view shop orders at `https://your-backend-domain/admin/shop/shoporder/`.
+
+Admin sign-in requires a separate authenticator setup for each selected identity. After entering admin credentials, select Ssemata, Moses, or Habib and scan the displayed QR code with an authenticator app. Save the recovery codes shown after enrollment.
 
 For personalized lease application confirmations, set `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (a verified Resend sender), and `RESEND_FROM_NAME=Boldstone Investments Team`. The applicant receives a formal confirmation email after the application is saved.
 
