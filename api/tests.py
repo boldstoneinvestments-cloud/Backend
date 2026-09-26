@@ -72,6 +72,43 @@ class PasswordResetTests(TestCase):
         self.assertEqual(response.status_code, 503)
         verify_captcha.assert_not_called()
 
+    @patch.dict('os.environ', {'RECAPTCHA_SECRET_KEY': 'test-secret'})
+    @patch('api.views.verify_recaptcha', return_value=False)
+    def test_signin_rejects_unverified_recaptcha(self, verify_captcha):
+        response = self.client.post(
+            '/api/account/sign-in',
+            {'email': self.customer.email, 'password': 'old-customer-password', 'recaptcha_token': 'invalid-token'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        verify_captcha.assert_called_once()
+
+    @patch.dict('os.environ', {'RECAPTCHA_SECRET_KEY': 'test-secret'})
+    @patch('api.views.verify_recaptcha', return_value=True)
+    def test_signin_succeeds_after_recaptcha_verifies(self, verify_captcha):
+        response = self.client.post(
+            '/api/account/sign-in',
+            {'email': self.customer.email, 'password': 'old-customer-password', 'recaptcha_token': 'verified-token'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['user']['email'], self.customer.email)
+        verify_captcha.assert_called_once()
+
+    @patch.dict('os.environ', {'RECAPTCHA_SECRET_KEY': ''})
+    @patch('api.views.verify_recaptcha')
+    def test_signin_fails_closed_when_recaptcha_secret_is_missing(self, verify_captcha):
+        response = self.client.post(
+            '/api/account/sign-in',
+            {'email': self.customer.email, 'password': 'old-customer-password'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 503)
+        verify_captcha.assert_not_called()
+
     def test_admin_session_and_api_require_staff(self):
         self.assertEqual(self.client.get('/api/admin/session').status_code, 401)
         self.assertEqual(self.client.get('/api/admin/users').status_code, 401)

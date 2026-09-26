@@ -256,6 +256,10 @@ def account_login(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     data = body(request) or {}
+    if not os.getenv('RECAPTCHA_SECRET_KEY', '').strip():
+        return JsonResponse({'error': 'Sign-in verification is not configured. Please try again later.'}, status=503)
+    if not verify_recaptcha(data.get('recaptcha_token', ''), request.META.get('REMOTE_ADDR', '')):
+        return JsonResponse({'error': 'Please complete the reCAPTCHA check and try again.'}, status=400)
     email = str(data.get('email', '')).strip().lower()
     user = User.objects.filter(email__iexact=email, is_staff=False, is_active=True).first()
     user = authenticate(username=user.username, password=data.get('password', '')) if user else None
