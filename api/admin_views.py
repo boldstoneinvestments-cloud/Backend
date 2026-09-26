@@ -1,14 +1,15 @@
 import json
+from functools import wraps
 from pathlib import Path
+from datetime import timedelta
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.decorators import login_required
 
-from .models import AdminPresence, ChatMessage, LeaseApplication, Order
+from .models import AdminActivity, AdminPresence, ChatMessage, LeaseApplication, Order
 from shop.models import ShopOrder
 
 MAX_CHAT_FILE_SIZE = 5 * 1024 * 1024
@@ -21,6 +22,63 @@ ADMIN_IDENTITIES = {
     'MOSES ALICWAMU': 'https://address-restaurant2.odoo.com/web/image/1571-51dfbae5/Moses%20Photo%20-%20up%20to%20date.webp',
     'HABIB TUMWESIGE': 'https://address-restaurant2.odoo.com/web/image/1982-2595a3af/Habib%20Salah.webp',
 }
+
+
+def staff_required(view):
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Admin sign in required'}, status=401)
+        if not request.user.is_active or not request.user.is_staff:
+            return JsonResponse({'error': 'Admin access required'}, status=403)
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
+def admin_required(view):
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Admin sign in required'}, status=401)
+        if not request.user.is_active or not request.user.is_staff:
+            return JsonResponse({'error': 'Admin access required'}, status=403)
+        if request.session.get('admin_identity_name') not in ADMIN_IDENTITIES:
+            return JsonResponse({'error': 'Choose your admin identity first'}, status=409)
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
+def identity_payload(identity_name):
+    if identity_name not in ADMIN_IDENTITIES:
+        return None
+    return {'name': identity_name, 'avatar': ADMIN_IDENTITIES[identity_name]}
+
+
+def log_admin_activity(request, action, target_type='', target_id='', details=None, identity_name=None, page=None):
+    AdminActivity.objects.create(
+        actor=request.user,
+        actor_username=request.user.username,
+        identity_name=identity_name or request.session.get('admin_identity_name', ''),
+        action=action,
+        page=page or request.session.get('admin_current_page', ''),
+        target_type=target_type,
+        target_id=str(target_id)[:255],
+        details=details or {},
+    )
+
+
+def serialize_activity(activity):
+    return {
+        'id': activity.id,
+        'actor_username': activity.actor_username,
+        'identity_name': activity.identity_name,
+        'action': activity.action,
+        'page': activity.page,
+        'target_type': activity.target_type,
+        'target_id': activity.target_id,
+        'details': activity.details,
+        'created_at': activity.created_at.isoformat(),
+    }
 
 
 def serialize_admin_user(user):
@@ -50,15 +108,71 @@ def login_admin(request):
     return JsonResponse({'success': True, 'username': user.username})
 
 
+@staff_required
+def admin_session(request):
+    identity_name = request.session.get('admin_identity_name', '')
+    return JsonResponse({
+        'authenticated': True,
+        'username': request.user.username,
+        'identity': identity_payload(identity_name),
+        'identities': [{'name': name, 'avatar': avatar} for name, avatar in ADMIN_IDENTITIES.items()],
+    })
+
+
 @csrf_exempt
-@login_required
+@staff_required
+def admin_identity(request):
+    if request.method == 'GET':
+        return JsonResponse({
+            'identity': identity_payload(request.session.get('admin_identity_name', '')),
+            'identities': [{'name': name, 'avatar': avatar} for name, avatar in ADMIN_IDENTITIES.items()],
+        })
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    identity_name = str(data.get('identity_name', '')).strip().upper()
+    previous_identity = request.session.get('admin_identity_name', '')
+    if identity_name and identity_name not in ADMIN_IDENTITIES:
+        return JsonResponse({'error': 'Choose a valid admin identity'}, status=400)
+    if identity_name:
+        request.session['admin_identity_name'] = identity_name
+        AdminPresence.objects.update_or_create(
+            user=request.user,
+            defaults={'identity_name': identity_name, 'identity_avatar': ADMIN_IDENTITIES[identity_name]},
+        )
+        log_admin_activity(
+            request,
+            'Selected admin identity' if not previous_identity else 'Changed admin identity',
+            target_type='identity',
+            target_id=identity_name,
+            details={'previous_identity': previous_identity},
+            identity_name=identity_name,
+        )
+        return JsonResponse({'identity': identity_payload(identity_name)})
+
+    if previous_identity:
+        log_admin_activity(request, 'Cleared admin identity', target_type='identity', target_id=previous_identity)
+    request.session.pop('admin_identity_name', None)
+    AdminPresence.objects.filter(user=request.user).update(identity_name='', identity_avatar='')
+    return JsonResponse({'identity': None})
+
+
+@csrf_exempt
+@staff_required
 def logout_admin(request):
+    if request.session.get('admin_identity_name'):
+        log_admin_activity(request, 'Signed out', 'admin session', request.user.username)
+    AdminPresence.objects.filter(user=request.user).update(last_seen=timezone.now() - timedelta(seconds=61))
     logout(request)
     return JsonResponse({'success': True})
 
 
 @csrf_exempt
-@login_required
+@admin_required
 def admin_users(request):
     if request.method == 'GET':
         return JsonResponse({
@@ -101,6 +215,7 @@ def admin_users(request):
         is_staff=True,
         is_active=True,
     )
+    log_admin_activity(request, 'Created admin account', 'admin account', user.username, {'user_id': user.id})
     return JsonResponse({
         'success': True,
         'user': serialize_admin_user(user),
@@ -108,7 +223,7 @@ def admin_users(request):
 
 
 @csrf_exempt
-@login_required
+@admin_required
 def admin_user_detail(request, user_id):
     if request.method != 'PUT':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -135,6 +250,15 @@ def admin_user_detail(request, user_id):
     if User.objects.filter(email=email).exclude(id=user.id).exists():
         return JsonResponse({'error': 'That email is already in use'}, status=409)
 
+    changed_fields = []
+    if user.get_full_name() != name:
+        changed_fields.append('name')
+    if user.username != username:
+        changed_fields.append('username')
+    if user.email != email:
+        changed_fields.append('email')
+    if password:
+        changed_fields.append('password')
     name_parts = name.split(None, 1)
     user.first_name = name_parts[0]
     user.last_name = name_parts[1] if len(name_parts) > 1 else ''
@@ -143,11 +267,12 @@ def admin_user_detail(request, user_id):
     if password:
         user.set_password(password)
     user.save()
+    log_admin_activity(request, 'Updated admin account', 'admin account', user.username, {'user_id': user.id, 'changed_fields': changed_fields})
     return JsonResponse({'success': True, 'user': serialize_admin_user(user)})
 
 
 @csrf_exempt
-@login_required
+@admin_required
 def admin_customers(request):
     if request.method == 'GET':
         contacts = {}
@@ -209,7 +334,7 @@ def admin_customers(request):
 
 
 @csrf_exempt
-@login_required
+@admin_required
 def admin_customer_delete(request, email):
     if request.method != 'DELETE':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -223,10 +348,17 @@ def admin_customer_delete(request, email):
 
     if not any((user_deleted, orders_deleted, legacy_orders_deleted, applications_deleted, messages_deleted)):
         return JsonResponse({'error': 'Customer not found'}, status=404)
+    log_admin_activity(request, 'Deleted customer records', 'customer', email, {
+        'accounts': user_deleted,
+        'shop_orders': orders_deleted,
+        'legacy_orders': legacy_orders_deleted,
+        'applications': applications_deleted,
+        'chat_messages': messages_deleted,
+    })
     return JsonResponse({'success': True})
 
 
-@login_required
+@admin_required
 def admin_orders(request):
     shop_orders = ShopOrder.objects.select_related('product').order_by('-created_at')
     legacy_orders = Order.objects.order_by('-created_at')
@@ -266,7 +398,7 @@ def admin_orders(request):
 
 
 @csrf_exempt
-@login_required
+@admin_required
 def admin_delete_order(request, order_id):
     if request.method != 'DELETE':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -286,10 +418,11 @@ def admin_delete_order(request, order_id):
 
     if not deleted:
         return JsonResponse({'error': 'Order not found'}, status=404)
+    log_admin_activity(request, 'Deleted order', f'{prefix} order', record_id)
     return JsonResponse({'success': True})
 
 
-@login_required
+@admin_required
 def admin_lease_applications(request):
     applications = LeaseApplication.objects.order_by('-created_at')
     return JsonResponse({
@@ -311,7 +444,7 @@ def admin_lease_applications(request):
     })
 
 
-@login_required
+@admin_required
 def admin_chat_messages(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -338,18 +471,50 @@ def admin_chat_messages(request):
 
 
 @csrf_exempt
-@login_required
+@admin_required
 def admin_presence(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    if not request.user.is_staff:
-        return JsonResponse({'error': 'Admin access required'}, status=403)
-    AdminPresence.objects.update_or_create(user=request.user, defaults={'last_seen': timezone.now()})
-    return JsonResponse({'success': True})
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    page = str(data.get('page', '/admin')).split('?', 1)[0].strip()[:255]
+    if page != '/admin' and not page.startswith('/admin/'):
+        page = '/admin'
+    identity_name = request.session['admin_identity_name']
+    presence, created = AdminPresence.objects.get_or_create(
+        user=request.user,
+        defaults={
+            'identity_name': identity_name,
+            'identity_avatar': ADMIN_IDENTITIES[identity_name],
+            'current_page': page,
+        },
+    )
+    previous_page = presence.current_page
+    page_changed = created or previous_page != page
+    if page_changed and not created:
+        presence.last_page = previous_page
+    presence.identity_name = identity_name
+    presence.identity_avatar = ADMIN_IDENTITIES[identity_name]
+    presence.current_page = page
+    presence.last_seen = timezone.now()
+    presence.save(update_fields=['identity_name', 'identity_avatar', 'current_page', 'last_page', 'last_seen'])
+    request.session['admin_current_page'] = page
+    if page_changed:
+        log_admin_activity(
+            request,
+            'Viewed admin page',
+            target_type='page',
+            target_id=page,
+            details={'previous_page': previous_page},
+            page=page,
+        )
+    return JsonResponse({'success': True, 'current_page': page, 'last_page': presence.last_page})
 
 
 @csrf_exempt
-@login_required
+@admin_required
 def admin_chat_reply(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -365,7 +530,7 @@ def admin_chat_reply(request):
     name = str(data.get('name', '')).strip()
     email = str(data.get('email', '')).strip()
     message = str(data.get('message', '')).strip()
-    admin_name = str(data.get('admin_name', '')).strip().upper()
+    admin_name = request.session['admin_identity_name']
     uploads = request.FILES.getlist('attachment')
     admin_avatar = ADMIN_IDENTITIES.get(admin_name)
     if any(upload.size > MAX_CHAT_FILE_SIZE or Path(upload.name).suffix.lower() not in ALLOWED_CHAT_EXTENSIONS for upload in uploads):
@@ -380,6 +545,10 @@ def admin_chat_reply(request):
         return JsonResponse({'error': 'Customer account not found'}, status=404)
     replies = [ChatMessage.objects.create(user=customer, name=customer.get_full_name(), email=customer.email, message=message if index == 0 else '', is_admin=True, admin_name=admin_name, admin_avatar=admin_avatar, attachment=upload) for index, upload in enumerate(uploads or [None])]
     reply = replies[0]
+    log_admin_activity(request, 'Replied to chat', 'chat', customer.email, {
+        'message_id': reply.id,
+        'attachment_count': len(uploads),
+    })
     serialized = [{
         'id': item.id,
         'name': item.name,
@@ -413,7 +582,7 @@ def admin_chat_reply(request):
 
 
 @csrf_exempt
-@login_required
+@admin_required
 def admin_chat_message_actions(request, message_id):
     if not request.user.is_staff:
         return JsonResponse({'error': 'Admin access required'}, status=403)
@@ -421,7 +590,9 @@ def admin_chat_message_actions(request, message_id):
     if message is None:
         return JsonResponse({'error': 'Message not found'}, status=404)
     if request.method == 'DELETE':
+        message_email = message.email
         message.delete()
+        log_admin_activity(request, 'Deleted chat message', 'chat message', message_id, {'email': message_email})
         return JsonResponse({'success': True, 'id': message_id})
     if request.method != 'PATCH' or not message.is_admin:
         return JsonResponse({'error': 'Only admin messages can be edited'}, status=405)
@@ -434,33 +605,38 @@ def admin_chat_message_actions(request, message_id):
         return JsonResponse({'error': 'Message cannot be empty'}, status=400)
     message.message = text
     message.save(update_fields=['message'])
+    log_admin_activity(request, 'Edited chat message', 'chat message', message_id, {'email': message.email, 'message_length': len(text)})
     return JsonResponse({'success': True, 'message': {'id': message.id, 'message': message.message}})
 
 
 @csrf_exempt
-@login_required
+@admin_required
 def admin_delete_chat(request, email):
     if not request.user.is_staff:
         return JsonResponse({'error': 'Admin access required'}, status=403)
     if request.method != 'DELETE':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     deleted, _ = ChatMessage.objects.filter(email__iexact=email).delete()
+    if deleted:
+        log_admin_activity(request, 'Deleted customer chat', 'chat', email, {'deleted_messages': deleted})
     return JsonResponse({'success': True, 'deleted': deleted})
 
 
 @csrf_exempt
-@login_required
+@admin_required
 def admin_delete_all_chats(request):
     if not request.user.is_staff:
         return JsonResponse({'error': 'Admin access required'}, status=403)
     if request.method != 'DELETE':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     deleted, _ = ChatMessage.objects.all().delete()
+    if deleted:
+        log_admin_activity(request, 'Deleted all chats', 'chat inbox', 'all', {'deleted_messages': deleted})
     return JsonResponse({'success': True, 'deleted': deleted})
 
 
 @csrf_exempt
-@login_required
+@admin_required
 def admin_delete_lease_application(request, application_id):
     if request.method != 'DELETE':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -468,4 +644,53 @@ def admin_delete_lease_application(request, application_id):
     deleted, _ = LeaseApplication.objects.filter(id=application_id).delete()
     if not deleted:
         return JsonResponse({'error': 'Application not found'}, status=404)
+    log_admin_activity(request, 'Deleted lease application', 'lease application', application_id)
     return JsonResponse({'success': True})
+
+
+@csrf_exempt
+@admin_required
+def admin_activity(request):
+    if request.method == 'GET':
+        now = timezone.now()
+        presences = AdminPresence.objects.filter(user__is_staff=True, user__is_active=True).select_related('user').order_by('-last_seen')
+        return JsonResponse({
+            'admins': [{
+                'username': presence.user.username,
+                'name': presence.identity_name or presence.user.get_full_name() or presence.user.username,
+                'avatar': presence.identity_avatar,
+                'is_online': presence.last_seen >= now - timedelta(seconds=60),
+                'current_page': presence.current_page,
+                'last_page': presence.last_page or presence.current_page,
+                'last_visited_page': presence.current_page,
+                'last_seen': presence.last_seen.isoformat(),
+            } for presence in presences],
+            'activity': [serialize_activity(activity) for activity in AdminActivity.objects.select_related('actor')[:100]],
+        })
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    action_map = {
+        'blog.post.created': 'Created blog post',
+        'blog.post.deleted': 'Deleted blog post',
+    }
+    action = action_map.get(str(data.get('action', '')))
+    if not action:
+        return JsonResponse({'error': 'Unsupported activity action'}, status=400)
+    page = str(data.get('page', '/admin/blog')).strip()
+    if page != '/admin' and not page.startswith('/admin/'):
+        page = '/admin/blog'
+    details = data.get('details')
+    title = str(details.get('title', '') if isinstance(details, dict) else '').strip()[:200]
+    log_admin_activity(
+        request,
+        action,
+        target_type='blog post',
+        target_id=data.get('target_id', ''),
+        details={'title': title},
+        page=page,
+    )
+    return JsonResponse({'success': True}, status=201)

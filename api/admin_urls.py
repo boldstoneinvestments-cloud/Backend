@@ -4,7 +4,10 @@ from . import views
 
 urlpatterns = [
     path('login', admin_views.login_admin),
+    path('session', admin_views.admin_session),
+    path('identity', admin_views.admin_identity),
     path('logout', admin_views.logout_admin),
+    path('activity', admin_views.admin_activity),
     path('password-reset', views.request_admin_password_reset),
     path('password-reset/confirm', views.confirm_admin_password_reset),
     path('google/start', views.google_start_admin),

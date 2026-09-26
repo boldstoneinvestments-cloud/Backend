@@ -4,6 +4,7 @@ from urllib.parse import parse_qs, urlparse
 from django.contrib.auth import get_user_model
 from django.core import signing
 from django.test import TestCase
+from api.models import AdminActivity, AdminPresence, ChatMessage
 
 
 User = get_user_model()
@@ -22,6 +23,77 @@ class PasswordResetTests(TestCase):
             password='old-admin-password',
             is_staff=True,
         )
+
+    def test_admin_session_and_api_require_staff(self):
+        self.assertEqual(self.client.get('/api/admin/session').status_code, 401)
+        self.assertEqual(self.client.get('/api/admin/users').status_code, 401)
+
+        self.client.force_login(self.customer)
+        self.assertEqual(self.client.get('/api/admin/session').status_code, 403)
+        self.assertEqual(self.client.get('/api/admin/users').status_code, 403)
+
+        self.client.force_login(self.admin)
+        session = self.client.get('/api/admin/session')
+        self.assertEqual(session.status_code, 200)
+        self.assertTrue(session.json()['authenticated'])
+        self.assertEqual(self.client.get('/api/admin/users').status_code, 409)
+        identity = self.client.post(
+            '/api/admin/identity',
+            {'identity_name': 'SSEMATA SABIRA'},
+            content_type='application/json',
+        )
+        self.assertEqual(identity.status_code, 200)
+        self.assertEqual(self.client.get('/api/admin/users').status_code, 200)
+
+    def test_selected_identity_stamps_chat_and_page_activity(self):
+        self.client.force_login(self.admin)
+        identity = self.client.post(
+            '/api/admin/identity',
+            {'identity_name': 'SSEMATA SABIRA'},
+            content_type='application/json',
+        )
+        self.assertEqual(identity.status_code, 200)
+        reply = self.client.post(
+            '/api/admin/chat/reply',
+            {
+                'name': 'Customer Example',
+                'email': self.customer.email,
+                'message': 'A reply from the selected profile.',
+                'admin_name': 'HABIB TUMWESIGE',
+            },
+            content_type='application/json',
+        )
+        self.assertEqual(reply.status_code, 201)
+        saved_reply = ChatMessage.objects.get(is_admin=True)
+        self.assertEqual(saved_reply.admin_name, 'SSEMATA SABIRA')
+
+        self.client.post('/api/admin/presence', {'page': '/admin/orders'}, content_type='application/json')
+        self.client.post('/api/admin/presence', {'page': '/admin/chat'}, content_type='application/json')
+        presence = AdminPresence.objects.get(user=self.admin)
+        self.assertEqual(presence.current_page, '/admin/chat')
+        self.assertEqual(presence.last_page, '/admin/orders')
+        self.assertTrue(AdminActivity.objects.filter(action='Replied to chat', identity_name='SSEMATA SABIRA').exists())
+        page_events = AdminActivity.objects.filter(action='Viewed admin page', actor=self.admin)
+        self.assertEqual(page_events.count(), 2)
+        activity_response = self.client.get('/api/admin/activity')
+        self.assertEqual(activity_response.status_code, 200)
+        admin_presence = activity_response.json()['admins'][0]
+        self.assertEqual(admin_presence['last_visited_page'], '/admin/chat')
+
+    def test_blog_actions_are_recorded_for_selected_identity(self):
+        self.client.force_login(self.admin)
+        self.client.post('/api/admin/identity', {'identity_name': 'MOSES ALICWAMU'}, content_type='application/json')
+        response = self.client.post(
+            '/api/admin/activity',
+            {'action': 'blog.post.created', 'target_id': 27, 'details': {'title': 'Coffee update'}, 'page': '/admin/blog'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        event = AdminActivity.objects.get(action='Created blog post')
+        self.assertEqual(event.identity_name, 'MOSES ALICWAMU')
+        self.assertEqual(event.actor, self.admin)
+        self.assertEqual(event.details['title'], 'Coffee update')
 
     @patch('api.views.send_password_reset_email', return_value=True)
     def test_customer_can_reset_password_with_email_link(self, send_reset_email):
