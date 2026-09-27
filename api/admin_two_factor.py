@@ -17,15 +17,26 @@ RECOVERY_FAILURES_SESSION_KEY = 'admin_2fa_recovery_failures'
 PENDING_CHALLENGE_SECONDS = 600
 RECOVERY_CODE_COUNT = 10
 MAX_RECOVERY_ATTEMPTS = 5
+TOTP_STEP_SECONDS = 15
 
 
 def begin_admin_two_factor(request, user, identity_name):
     device_name = f'admin:{identity_name}'
-    device, _ = TOTPDevice.objects.get_or_create(
+    device, created = TOTPDevice.objects.get_or_create(
         user=user,
         name=device_name,
-        defaults={'confirmed': False},
+        defaults={'confirmed': False, 'step': TOTP_STEP_SECONDS, 'digits': 6},
     )
+    if not created:
+        changed = False
+        if device.step != TOTP_STEP_SECONDS:
+            device.step = TOTP_STEP_SECONDS
+            changed = True
+        if device.digits != 6:
+            device.digits = 6
+            changed = True
+        if changed:
+            device.save(update_fields=['step', 'digits'])
     request.session.pop(VERIFIED_SESSION_KEY, None)
     request.session.pop(RECOVERY_FAILURES_SESSION_KEY, None)
     request.session[PENDING_SESSION_KEY] = {

@@ -181,6 +181,7 @@ class PasswordResetTests(TestCase):
         self.assertTrue(setup.json()['setup_required'])
         self.assertTrue(setup.json()['provisioning_uri'].startswith('otpauth://totp/'))
         device = TOTPDevice.objects.get(user=self.admin, name='admin:SSEMATA SABIRA')
+        self.assertEqual(device.step, 15)
         timestamp = int(time.time()) + 60
 
         verified = self.verify_admin_code(self.totp_code(device, timestamp), timestamp)
