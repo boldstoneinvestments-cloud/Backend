@@ -190,7 +190,7 @@ class PasswordResetTests(TestCase):
         self.assertEqual(len(verified.json()['recovery_codes']), 10)
         self.assertEqual(self.client.get('/api/admin/session').json()['identity']['name'], 'SSEMATA SABIRA')
 
-    def test_repeat_admin_signin_uses_remembered_identity_without_selection(self):
+    def test_admin_login_requires_brand_new_identity_selection_after_password(self):
         self.authenticate_admin_with_totp('MOSES ALICWAMU')
         self.client.logout()
 
@@ -201,10 +201,20 @@ class PasswordResetTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json()['identity_selection_required'])
-        self.assertTrue(response.json()['two_factor_required'])
-        self.assertEqual(response.json()['pending_identity']['name'], 'MOSES ALICWAMU')
-        self.assertFalse(response.json()['two_factor']['setup_required'])
+        self.assertTrue(response.json()['identity_selection_required'])
+        self.assertNotIn('pending_identity', response.json())
+        self.assertNotIn('two_factor_required', response.json())
+        self.assertEqual(len(response.json()['identities']), 3)
+
+        selected = self.client.post(
+            '/api/admin/identity',
+            {'identity_name': 'MOSES ALICWAMU'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(selected.status_code, 200)
+        self.assertTrue(selected.json()['two_factor_required'])
+        self.assertFalse(selected.json()['setup_required'])
 
         device = TOTPDevice.objects.get(user=self.admin, name='admin:MOSES ALICWAMU')
         timestamp = int(time.time()) + 120
