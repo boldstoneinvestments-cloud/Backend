@@ -183,7 +183,7 @@ class PasswordResetTests(TestCase):
         self.assertTrue(setup.json()['setup_required'])
         self.assertTrue(setup.json()['provisioning_uri'].startswith('otpauth://totp/'))
         device = TOTPDevice.objects.get(user=self.admin, name='admin:SSEMATA SABIRA')
-        self.assertEqual(device.step, 15)
+        self.assertEqual(device.step, 30)
         timestamp = int(time.time()) + 60
 
         verified = self.verify_admin_code(self.totp_code(device, timestamp), timestamp)
@@ -269,6 +269,21 @@ class PasswordResetTests(TestCase):
             content_type='application/json',
         )
         self.assertEqual(reused.status_code, 400)
+
+    def test_existing_admin_totp_device_uses_thirty_second_interval(self):
+        TOTPDevice.objects.create(
+            user=self.admin,
+            name='admin:SSEMATA SABIRA',
+            confirmed=True,
+            step=15,
+            digits=6,
+        )
+
+        selected = self.start_admin_identity_setup('SSEMATA SABIRA')
+
+        self.assertFalse(selected.json()['setup_required'])
+        device = TOTPDevice.objects.get(user=self.admin, name='admin:SSEMATA SABIRA')
+        self.assertEqual(device.step, 30)
 
     def test_reset_admin_two_factor_only_removes_selected_identity(self):
         TOTPDevice.objects.get_or_create(

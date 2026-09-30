@@ -17,7 +17,7 @@ RECOVERY_FAILURES_SESSION_KEY = 'admin_2fa_recovery_failures'
 PENDING_CHALLENGE_SECONDS = 600
 RECOVERY_CODE_COUNT = 10
 MAX_RECOVERY_ATTEMPTS = 5
-TOTP_STEP_SECONDS = 15
+TOTP_STEP_SECONDS = 30
 
 
 def begin_admin_two_factor(request, user, identity_name):
