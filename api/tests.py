@@ -1,13 +1,15 @@
+from io import StringIO
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 import time
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.core import signing
 from django.test import TestCase
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
-from api.models import AdminActivity, AdminPresence, ChatMessage
+from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, ChatMessage
 
 
 User = get_user_model()
@@ -267,6 +269,33 @@ class PasswordResetTests(TestCase):
             content_type='application/json',
         )
         self.assertEqual(reused.status_code, 400)
+
+    def test_reset_admin_two_factor_only_removes_selected_identity(self):
+        TOTPDevice.objects.get_or_create(
+            user=self.admin,
+            name='admin:SSEMATA SABIRA',
+            defaults={'confirmed': True, 'step': 15, 'digits': 6},
+        )
+        TOTPDevice.objects.get_or_create(
+            user=self.admin,
+            name='admin:MOSES ALICWAMU',
+            defaults={'confirmed': True, 'step': 15, 'digits': 6},
+        )
+        recovery = AdminRecoveryCodes.objects.create(
+            user=self.admin,
+            identity_code_hashes={
+                'SSEMATA SABIRA': ['ssemata-hash'],
+                'MOSES ALICWAMU': ['moses-hash'],
+            },
+        )
+
+        call_command('reset_admin_two_factor', 'SSEMATA SABIRA', stdout=StringIO())
+
+        self.assertTrue(User.objects.filter(pk=self.admin.pk).exists())
+        self.assertFalse(TOTPDevice.objects.filter(user=self.admin, name='admin:SSEMATA SABIRA').exists())
+        self.assertTrue(TOTPDevice.objects.filter(user=self.admin, name='admin:MOSES ALICWAMU').exists())
+        recovery.refresh_from_db()
+        self.assertEqual(recovery.identity_code_hashes, {'MOSES ALICWAMU': ['moses-hash']})
 
     def test_selected_identity_stamps_chat_and_page_activity(self):
         self.authenticate_admin_with_totp('SSEMATA SABIRA')
