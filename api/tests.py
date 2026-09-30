@@ -354,6 +354,40 @@ class PasswordResetTests(TestCase):
         recovery.refresh_from_db()
         self.assertEqual(recovery.identity_code_hashes, {'MOSES ALICWAMU': ['moses-hash']})
 
+    def test_followup_deploy_migration_resets_only_moses_and_habib_two_factor(self):
+        for identity_name in ('SSEMATA SABIRA', 'MOSES ALICWAMU', 'HABIB TUMWESIGE'):
+            TOTPDevice.objects.create(
+                user=self.admin,
+                name=f'admin:{identity_name}',
+                confirmed=True,
+                step=30,
+                digits=6,
+            )
+        recovery = AdminRecoveryCodes.objects.create(
+            user=self.admin,
+            identity_code_hashes={
+                'SSEMATA SABIRA': ['ssemata-hash'],
+                'MOSES ALICWAMU': ['moses-hash'],
+                'HABIB TUMWESIGE': ['habib-hash'],
+            },
+        )
+        migration = import_module('api.migrations.0014_reset_moses_habib_two_factor')
+        migration_apps = MigrationExecutor(connection).loader.project_state(
+            [('api', '0014_reset_moses_habib_two_factor')],
+        ).apps
+
+        migration.reset_moses_habib_two_factor(
+            migration_apps,
+            SimpleNamespace(connection=connection),
+        )
+
+        self.assertTrue(User.objects.filter(pk=self.admin.pk).exists())
+        self.assertTrue(TOTPDevice.objects.filter(user=self.admin, name='admin:SSEMATA SABIRA').exists())
+        self.assertFalse(TOTPDevice.objects.filter(user=self.admin, name='admin:MOSES ALICWAMU').exists())
+        self.assertFalse(TOTPDevice.objects.filter(user=self.admin, name='admin:HABIB TUMWESIGE').exists())
+        recovery.refresh_from_db()
+        self.assertEqual(recovery.identity_code_hashes, {'SSEMATA SABIRA': ['ssemata-hash']})
+
     def test_selected_identity_stamps_chat_and_page_activity(self):
         self.authenticate_admin_with_totp('SSEMATA SABIRA')
         reply = self.client.post(

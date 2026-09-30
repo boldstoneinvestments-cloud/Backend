@@ -21,7 +21,7 @@ Set `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in Railway variables. 
 
 Admin sign-in requires a separate authenticator setup for each selected identity. After entering admin credentials, select Ssemata, Moses, or Habib and scan the displayed QR code with an authenticator app. Save the recovery codes shown after enrollment.
 
-The next backend deployment runs a one-time migration to reset Ssemata's authenticator and recovery codes so she can enroll again. Later deployments will not repeat this reset.
+The next backend deployment runs one-time migrations to reset the authenticators and recovery codes for Ssemata, Moses, and Habib so they can enroll again. Later deployments will not repeat these resets.
 
 For personalized lease application confirmations, set `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (a verified Resend sender), and `RESEND_FROM_NAME=Boldstone Investments Team`. The applicant receives a formal confirmation email after the application is saved.
 
