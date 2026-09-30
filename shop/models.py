@@ -9,6 +9,7 @@ class Product(models.Model):
     )
 
     id = models.CharField(max_length=80, primary_key=True)
+    slug = models.SlugField(max_length=100, unique=True, blank=True)
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     name = models.CharField(max_length=200)
     price = models.PositiveIntegerField()

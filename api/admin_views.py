@@ -13,6 +13,7 @@ from django.contrib.sessions.models import Session
 from django.db import transaction
 from django.http import JsonResponse
 from django.utils.encoding import force_bytes
+from django.utils.text import slugify
 from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -37,9 +38,28 @@ ADMIN_IDENTITIES = {
 SHOP_PRODUCT_CATEGORIES = dict(Product.CATEGORY_CHOICES)
 
 
+def unique_shop_product_slug(name, existing=None):
+    if existing and existing.name == name and existing.slug:
+        return existing.slug
+
+    base_slug = slugify(name)[:100].rstrip('-') or 'product'
+    candidate = base_slug
+    suffix = 2
+    while True:
+        matches = Product.objects.filter(slug=candidate)
+        if existing:
+            matches = matches.exclude(pk=existing.pk)
+        if not matches.exists():
+            return candidate
+        suffix_text = f'-{suffix}'
+        candidate = f'{base_slug[:100 - len(suffix_text)].rstrip("-")}{suffix_text}'
+        suffix += 1
+
+
 def serialize_shop_product(product):
     return {
         'id': product.id,
+        'slug': product.slug,
         'category': product.category,
         'name': product.name,
         'price': product.price,
@@ -106,6 +126,7 @@ def validate_shop_product_data(data, existing=None):
 
     return {
         'id': product_id,
+        'slug': unique_shop_product_slug(name, existing),
         'category': category,
         'name': name,
         'price': price,
@@ -462,7 +483,7 @@ def admin_shop_products(request):
 @admin_required
 def admin_shop_product_detail(request, product_id):
     if request.method == 'GET':
-        product = Product.objects.filter(pk=product_id).first()
+        product = Product.objects.filter(pk=product_id).first() or Product.objects.filter(slug=product_id).first()
         if product is None:
             return JsonResponse({'error': 'Product not found.'}, status=404)
         return JsonResponse({'product': serialize_shop_product(product)})
@@ -474,7 +495,7 @@ def admin_shop_product_detail(request, product_id):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     if not isinstance(data, dict):
         return JsonResponse({'error': 'Invalid product data.'}, status=400)
-    product = Product.objects.filter(pk=product_id).first()
+    product = Product.objects.filter(pk=product_id).first() or Product.objects.filter(slug=product_id).first()
     if product is None:
         return JsonResponse({'error': 'Product not found.'}, status=404)
     product_data, error = validate_shop_product_data(data, existing=product)

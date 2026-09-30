@@ -595,7 +595,7 @@ class PasswordResetTests(TestCase):
     def test_verified_admin_can_create_and_edit_shop_products_and_details(self):
         self.authenticate_admin_with_totp()
         product_data = {
-            'id': 'admin-product',
+            'id': '12',
             'category': 'roasted',
             'name': 'Admin Added Roast',
             'price': 25000,
@@ -611,13 +611,22 @@ class PasswordResetTests(TestCase):
         created = self.client.post('/api/admin/shop/products', product_data, content_type='application/json')
 
         self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.json()['product']['slug'], 'admin-added-roast')
         self.assertEqual(created.json()['product']['details']['Origin'], 'Uganda')
-        edit_data = self.client.get('/api/admin/shop/products/admin-product')
+        duplicate = self.client.post(
+            '/api/admin/shop/products',
+            {**product_data, 'id': '13'},
+            content_type='application/json',
+        )
+        self.assertEqual(duplicate.status_code, 201)
+        self.assertEqual(duplicate.json()['product']['slug'], 'admin-added-roast-2')
+        edit_data = self.client.get('/api/admin/shop/products/admin-added-roast')
         self.assertEqual(edit_data.status_code, 200)
         self.assertEqual(edit_data.json()['product']['varieties'], [])
         self.assertEqual(edit_data.json()['product']['details']['Origin'], 'Uganda')
+        self.assertEqual(self.client.get('/api/admin/shop/products/12').status_code, 200)
         public_products = self.client.get('/api/shop/products').json()
-        public_product = next(product for product in public_products['roasted'] if product['id'] == 'admin-product')
+        public_product = next(product for product in public_products['roasted'] if product['id'] == '12')
         self.assertEqual(public_product['details']['Roast level'], 'Medium')
 
         product_data.update({
@@ -626,16 +635,18 @@ class PasswordResetTests(TestCase):
             'details': {'Roast level': 'Dark', 'Process': 'Washed'},
         })
         updated = self.client.put(
-            '/api/admin/shop/products/admin-product',
+            '/api/admin/shop/products/admin-added-roast',
             product_data,
             content_type='application/json',
         )
 
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(updated.json()['product']['name'], 'Updated Admin Roast')
-        self.assertFalse(ShopProduct.objects.get(pk='admin-product').active)
+        self.assertEqual(updated.json()['product']['slug'], 'updated-admin-roast')
+        self.assertFalse(ShopProduct.objects.get(pk='12').active)
+        self.assertEqual(self.client.get('/api/admin/shop/products/updated-admin-roast').status_code, 200)
         public_products = self.client.get('/api/shop/products').json()
-        self.assertNotIn('admin-product', [product['id'] for product in public_products['roasted']])
+        self.assertNotIn('12', [product['id'] for product in public_products['roasted']])
 
     @patch.dict('os.environ', {
         'CLOUDINARY_CLOUD_NAME': 'boldstone-test',
