@@ -28,7 +28,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='product',
             name='slug',
-            field=models.SlugField(blank=True, default='', max_length=100),
+            field=models.SlugField(blank=True, db_index=False, default='', max_length=100),
         ),
         migrations.RunPython(populate_product_slugs, migrations.RunPython.noop),
         migrations.AlterField(

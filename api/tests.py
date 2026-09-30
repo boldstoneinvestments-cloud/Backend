@@ -18,7 +18,7 @@ from api.admin_cache import get_admin_cache, set_admin_cache
 from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, ChatMessage, Order
 from api.views import customer_token
 from email_service import queue_password_reset_email, send_password_reset_email
-from shop.models import Product as ShopProduct
+from shop.models import Product as ShopProduct, ShopOrder
 
 
 User = get_user_model()
@@ -647,6 +647,54 @@ class PasswordResetTests(TestCase):
         self.assertEqual(self.client.get('/api/admin/shop/products/updated-admin-roast').status_code, 200)
         public_products = self.client.get('/api/shop/products').json()
         self.assertNotIn('12', [product['id'] for product in public_products['roasted']])
+
+    def test_verified_admin_can_delete_product_and_audit_the_action(self):
+        self.authenticate_admin_with_totp()
+        product = ShopProduct.objects.create(
+            id='delete-me',
+            slug='delete-me',
+            category='trees',
+            name='Delete Me Tree',
+            price=1000,
+            unit='per seedling',
+            image='https://example.com/tree.jpg',
+            description='A test product.',
+        )
+
+        response = self.client.delete(f'/api/admin/shop/products/{product.slug}')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(ShopProduct.objects.filter(pk=product.pk).exists())
+        self.assertTrue(AdminActivity.objects.filter(action='Deleted shop product', target_id=product.id).exists())
+
+    def test_admin_product_delete_is_blocked_when_orders_reference_product(self):
+        self.authenticate_admin_with_totp()
+        product = ShopProduct.objects.create(
+            id='ordered-product',
+            slug='ordered-product',
+            category='trees',
+            name='Ordered Tree',
+            price=1000,
+            unit='per seedling',
+            image='https://example.com/tree.jpg',
+            description='A test product.',
+        )
+        ShopOrder.objects.create(
+            invoice_number='BS-TEST-001',
+            name='Order Customer',
+            phone='555-0100',
+            email='order@example.com',
+            product=product,
+            product_name=product.name,
+            quantity=1,
+            location='Kyenjojo',
+        )
+
+        response = self.client.delete(f'/api/admin/shop/products/{product.slug}')
+
+        self.assertEqual(response.status_code, 409)
+        self.assertTrue(ShopProduct.objects.filter(pk=product.pk).exists())
+        self.assertIn('existing orders', response.json()['error'])
 
     @patch.dict('os.environ', {
         'CLOUDINARY_CLOUD_NAME': 'boldstone-test',

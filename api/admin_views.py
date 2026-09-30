@@ -11,6 +11,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator, URLValidator
 from django.contrib.sessions.models import Session
 from django.db import transaction
+from django.db.models.deletion import ProtectedError
 from django.http import JsonResponse
 from django.utils.encoding import force_bytes
 from django.utils.text import slugify
@@ -479,14 +480,31 @@ def admin_shop_products(request):
     return JsonResponse({'success': True, 'product': serialize_shop_product(product)}, status=201)
 
 
+def find_shop_product(product_id):
+    return Product.objects.filter(pk=product_id).first() or Product.objects.filter(slug=product_id).first()
+
+
 @csrf_exempt
 @admin_required
 def admin_shop_product_detail(request, product_id):
     if request.method == 'GET':
-        product = Product.objects.filter(pk=product_id).first() or Product.objects.filter(slug=product_id).first()
+        product = find_shop_product(product_id)
         if product is None:
             return JsonResponse({'error': 'Product not found.'}, status=404)
         return JsonResponse({'product': serialize_shop_product(product)})
+    if request.method == 'DELETE':
+        product = find_shop_product(product_id)
+        if product is None:
+            return JsonResponse({'error': 'Product not found.'}, status=404)
+        deleted_product_id = product.id
+        deleted_product_name = product.name
+        try:
+            with transaction.atomic():
+                product.delete()
+                log_admin_activity(request, 'Deleted shop product', 'shop product', deleted_product_id, {'name': deleted_product_name})
+        except ProtectedError:
+            return JsonResponse({'error': 'This product cannot be deleted because existing orders reference it.'}, status=409)
+        return JsonResponse({'success': True})
     if request.method != 'PUT':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     try:
@@ -495,7 +513,7 @@ def admin_shop_product_detail(request, product_id):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     if not isinstance(data, dict):
         return JsonResponse({'error': 'Invalid product data.'}, status=400)
-    product = Product.objects.filter(pk=product_id).first() or Product.objects.filter(slug=product_id).first()
+    product = find_shop_product(product_id)
     if product is None:
         return JsonResponse({'error': 'Product not found.'}, status=404)
     product_data, error = validate_shop_product_data(data, existing=product)
