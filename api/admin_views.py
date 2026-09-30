@@ -352,6 +352,9 @@ def admin_user_detail(request, user_id):
 def admin_customers(request):
     if request.method == 'GET':
         contacts = {}
+        record_keys = {}
+        details_email = request.GET.get('email', '').strip()
+        include_details = bool(details_email)
 
         def add_contact(email, name='', phone='', source='', reason='', created_at=None, account=None, details=None):
             key = email.lower()
@@ -383,24 +386,71 @@ def admin_customers(request):
                 contact['phone'] = phone
             if source and source not in contact['sources']:
                 contact['sources'].append(source)
-            if source and not any(record['source'] == source and record['date'] == created_at.isoformat() for record in contact['records']):
-                contact['records'].append({
-                    'source': source,
-                    'reason': reason,
-                    'date': created_at.isoformat() if created_at else '',
-                    'details': details or {},
-                })
+            if include_details and source:
+                record_date = created_at.isoformat() if created_at else ''
+                seen_records = record_keys.setdefault(key, set())
+                record_key = (source, record_date)
+                if record_key not in seen_records:
+                    seen_records.add(record_key)
+                    contact['records'].append({
+                        'source': source,
+                        'reason': reason,
+                        'date': record_date,
+                        'details': details or {},
+                    })
             if created_at and (not contact['date_joined'] or created_at.isoformat() > contact['date_joined']):
                 contact['date_joined'] = created_at.isoformat()
 
-        for user in User.objects.filter(is_staff=False).order_by('first_name', 'last_name', 'email'):
-            add_contact(user.email, user.get_full_name(), source='Chat account', reason='Signed up to use customer chat', created_at=user.date_joined, account=user, details={'username': user.username})
-        for order in ShopOrder.objects.order_by('created_at'):
-            add_contact(order.email, order.name, order.phone, 'Order page', 'Placed an order', order.created_at, details={'product': order.product_name, 'quantity': order.quantity, 'location': order.location, 'country': order.country, 'province': order.province, 'district': order.district, 'street': order.street, 'village': order.village, 'notes': order.notes, 'invoice_number': order.invoice_number})
-        for order in Order.objects.order_by('created_at'):
-            add_contact(order.email, order.name, order.phone, 'Order page', 'Placed an order', order.created_at, details={'product': order.product, 'quantity': order.quantity, 'location': order.location, 'notes': order.notes})
-        for application in LeaseApplication.objects.order_by('created_at'):
-            add_contact(application.email, application.full_name, application.phone, 'Lease page', 'Applied to lease a coffee farm', application.created_at, details={'plan': application.plan, 'country': application.country, 'address': application.address, 'status': application.status, 'notes': application.notes})
+        users = User.objects.filter(is_staff=False)
+        shop_orders = ShopOrder.objects.all()
+        legacy_orders = Order.objects.all()
+        applications = LeaseApplication.objects.all()
+        shop_order_fields = ['email', 'name', 'phone', 'created_at']
+        legacy_order_fields = ['email', 'name', 'phone', 'created_at']
+        application_fields = ['email', 'full_name', 'phone', 'created_at']
+        record_ordering = ('created_at',) if include_details else ()
+        if include_details:
+            users = users.filter(email__iexact=details_email)
+            shop_orders = shop_orders.filter(email__iexact=details_email)
+            legacy_orders = legacy_orders.filter(email__iexact=details_email)
+            applications = applications.filter(email__iexact=details_email)
+            shop_order_fields.extend(['product_name', 'quantity', 'location', 'country', 'province', 'district', 'street', 'village', 'notes', 'invoice_number'])
+            legacy_order_fields.extend(['product', 'quantity', 'location', 'notes'])
+            application_fields.extend(['country', 'address', 'plan', 'notes', 'status'])
+
+        for user in users.only('id', 'username', 'email', 'first_name', 'last_name', 'is_active', 'date_joined').order_by():
+            add_contact(user.email, user.get_full_name(), source='Chat account', reason='Signed up to use customer chat', created_at=user.date_joined, account=user, details={'username': user.username} if include_details else None)
+        for order in shop_orders.only(*shop_order_fields).order_by(*record_ordering):
+            details = {
+                'product': order.product_name,
+                'quantity': order.quantity,
+                'location': order.location,
+                'country': order.country,
+                'province': order.province,
+                'district': order.district,
+                'street': order.street,
+                'village': order.village,
+                'notes': order.notes,
+                'invoice_number': order.invoice_number,
+            } if include_details else None
+            add_contact(order.email, order.name, order.phone, 'Order page', 'Placed an order', order.created_at, details=details)
+        for order in legacy_orders.only(*legacy_order_fields).order_by(*record_ordering):
+            details = {
+                'product': order.product,
+                'quantity': order.quantity,
+                'location': order.location,
+                'notes': order.notes,
+            } if include_details else None
+            add_contact(order.email, order.name, order.phone, 'Order page', 'Placed an order', order.created_at, details=details)
+        for application in applications.only(*application_fields).order_by(*record_ordering):
+            details = {
+                'country': application.country,
+                'address': application.address,
+                'plan': application.plan,
+                'status': application.status,
+                'notes': application.notes,
+            } if include_details else None
+            add_contact(application.email, application.full_name, application.phone, 'Lease page', 'Applied to lease a coffee farm', application.created_at, details=details)
 
         return JsonResponse({
             'customers': sorted(contacts.values(), key=lambda contact: (contact['name'] or contact['email']).lower()),

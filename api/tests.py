@@ -13,7 +13,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.test import TestCase
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
-from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, ChatMessage
+from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, ChatMessage, Order
 from email_service import queue_password_reset_email, send_password_reset_email
 
 
@@ -568,6 +568,30 @@ class PasswordResetTests(TestCase):
         response = self.client.post('/api/admin/customers/999999/password-reset-link')
 
         self.assertEqual(response.status_code, 404)
+
+    def test_admin_customer_list_defers_record_details_until_selected(self):
+        self.authenticate_admin_with_totp()
+        Order.objects.create(
+            name='Customer Example',
+            phone='555-0100',
+            email=self.customer.email,
+            product='Coffee seedlings',
+            quantity=2,
+            location='Kyenjojo',
+            notes='Order details should load on demand.',
+        )
+
+        summary_response = self.client.get('/api/admin/customers')
+        summary = next(customer for customer in summary_response.json()['customers'] if customer['email'] == self.customer.email)
+        details_response = self.client.get(f'/api/admin/customers?email={self.customer.email}')
+        details = next(customer for customer in details_response.json()['customers'] if customer['email'] == self.customer.email)
+
+        self.assertEqual(summary_response.status_code, 200)
+        self.assertEqual(summary['records'], [])
+        self.assertIn('Order page', summary['sources'])
+        self.assertEqual(details_response.status_code, 200)
+        self.assertEqual(len(details['records']), 2)
+        self.assertEqual(details['records'][1]['details']['notes'], 'Order details should load on demand.')
 
     @patch('api.views.queue_password_reset_email')
     def test_unknown_email_gets_generic_response_without_queueing_mail(self, queue_reset_email):
