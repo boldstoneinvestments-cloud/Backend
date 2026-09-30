@@ -17,6 +17,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.db import connection
 from django.views.decorators.csrf import csrf_exempt
 from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_KEY
+from .admin_cache import cache_json_response
 from .models import ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
 from email_service import queue_password_reset_email, send_lease_application_confirmation
 
@@ -348,6 +349,7 @@ def account_logout(request):
     return JsonResponse({'success': True})
 
 
+@cache_json_response('estate')
 def estate(request):
     leases = list(Lease.objects.values('acres'))
     total_leased = sum(lease['acres'] for lease in leases)
@@ -395,12 +397,10 @@ def contact(request):
     return JsonResponse({'success': True})
 
 
+@customer_required
+@cache_json_response('customer_chat', scope=lambda request: request.api_user.id)
 def chat(request):
-    user = token_user(request)
-    if user is None and not request.user.is_anonymous and not request.user.is_staff:
-        user = request.user
-    if user is None:
-        return JsonResponse({'error': 'Sign in required'}, status=401)
+    user = request.api_user
     if request.method == 'GET':
         return JsonResponse({
             'messages': [

@@ -4,12 +4,14 @@ from uuid import uuid4
 from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from api.admin_cache import cache_json_response
 from .models import Product, ShopOrder
 from email_service import send_shop_order_confirmation
 
 
 CATEGORY_ORDER = ['seedlings', 'roasted', 'trees']
 
+@cache_json_response('shop_products')
 def products(request):
     catalog = {}
     for product in Product.objects.filter(active=True):

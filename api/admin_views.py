@@ -17,6 +17,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_KEY, admin_two_factor_status as get_admin_two_factor_status, begin_admin_two_factor, complete_admin_two_factor
+from .admin_cache import cache_json_response
 from .models import AdminActivity, AdminPresence, ChatMessage, CustomerProfile, LeaseApplication, Order
 from email_service import queue_password_reset_email
 from shop.models import ShopOrder
@@ -250,6 +251,7 @@ def logout_admin(request):
 
 @csrf_exempt
 @admin_required
+@cache_json_response('admin_users')
 def admin_users(request):
     if request.method == 'GET':
         return JsonResponse({
@@ -350,6 +352,7 @@ def admin_user_detail(request, user_id):
 
 @csrf_exempt
 @admin_required
+@cache_json_response('admin_customers', scope=lambda request: request.GET.get('email', '').strip().lower() or 'all')
 def admin_customers(request):
     if request.method == 'GET':
         contacts = {}
@@ -564,6 +567,7 @@ def admin_customer_logout(request, user_id):
 
 
 @admin_required
+@cache_json_response('admin_orders')
 def admin_orders(request):
     shop_orders = ShopOrder.objects.select_related('product').order_by('-created_at')
     legacy_orders = Order.objects.order_by('-created_at')
@@ -628,6 +632,7 @@ def admin_delete_order(request, order_id):
 
 
 @admin_required
+@cache_json_response('admin_lease_applications')
 def admin_lease_applications(request):
     applications = LeaseApplication.objects.order_by('-created_at')
     return JsonResponse({
@@ -650,6 +655,7 @@ def admin_lease_applications(request):
 
 
 @admin_required
+@cache_json_response('admin_chat')
 def admin_chat_messages(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -855,6 +861,7 @@ def admin_delete_lease_application(request, application_id):
 
 @csrf_exempt
 @admin_required
+@cache_json_response('admin_activity')
 def admin_activity(request):
     if request.method == 'GET':
         now = timezone.now()

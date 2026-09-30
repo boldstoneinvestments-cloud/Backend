@@ -19,7 +19,7 @@ INSTALLED_APPS = [
 	'django.contrib.staticfiles',
 	'django_otp',
 	'django_otp.plugins.otp_totp',
-	'api',
+	'api.apps.ApiConfig',
 	'shop',
 ]
 MIDDLEWARE = [
@@ -56,6 +56,19 @@ DATABASES = {
 }
 if DATABASES['default']['ENGINE'].endswith('postgresql'):
 	DATABASES['default'].setdefault('OPTIONS', {})['connect_timeout'] = 5
+REDIS_URL = os.getenv('REDIS_URL', '').strip()
+CACHES = {
+	'default': {
+		'BACKEND': 'django_redis.cache.RedisCache' if REDIS_URL else 'django.core.cache.backends.locmem.LocMemCache',
+		'LOCATION': REDIS_URL or 'boldstone-local-cache',
+		'OPTIONS': {
+			'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+			'IGNORE_EXCEPTIONS': True,
+			'SOCKET_CONNECT_TIMEOUT': 0.5,
+			'SOCKET_TIMEOUT': 0.5,
+		} if REDIS_URL else {},
+	}
+}
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 USE_TZ = True
 LANGUAGE_CODE = 'en-us'

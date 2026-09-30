@@ -15,6 +15,8 @@ API endpoints: `GET /api/health`, `GET /api/estate`, `POST /api/estate/invest`, 
 
 Create the Railway service from this repository with the service root directory set to the repository root (leave the root directory unset). `manage.py`, `requirements.txt`, and `railway.toml` are at the repository root. Railway will use `railway.toml` to run migrations and start Gunicorn. Set `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS` in the Railway service variables.
 
+For shared caching across backend workers, add a Railway Redis service and set this service's `REDIS_URL` variable to the Redis service's private connection URL. Admin users, customers, orders, lease applications, chats, activity, product catalog, estate totals, and customer chat responses are cached and invalidated when their source data changes. Without Redis, the backend falls back to per-process memory caching.
+
 Set the matching reCAPTCHA secret as `RECAPTCHA_SECRET_KEY` in this backend service. The public site key belongs in the frontend build environment; do not put it in this backend-only setting or expose the secret in frontend variables.
 
 Set `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in Railway variables. The deployment creates the admin account automatically, and you can view shop orders at `https://your-backend-domain/admin/shop/shoporder/`.

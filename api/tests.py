@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 import time
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.management import call_command
 from django.core import signing
 from django.db import connection
@@ -13,6 +14,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.test import Client, TestCase
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
+from api.admin_cache import get_admin_cache, set_admin_cache
 from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, ChatMessage, Order
 from api.views import customer_token
 from email_service import queue_password_reset_email, send_password_reset_email
@@ -612,6 +614,27 @@ class PasswordResetTests(TestCase):
         self.assertEqual(details_response.status_code, 200)
         self.assertEqual(len(details['records']), 2)
         self.assertEqual(details['records'][1]['details']['notes'], 'Order details should load on demand.')
+
+    def test_admin_chat_cache_is_reused_and_invalidated_after_message_write(self):
+        self.authenticate_admin_with_totp()
+        cache.clear()
+        set_admin_cache('admin_chat', {'messages': []})
+
+        cached_response = self.client.get('/api/admin/chat')
+
+        self.assertEqual(cached_response.json(), {'messages': []})
+        self.assertIsNotNone(get_admin_cache('admin_chat'))
+        ChatMessage.objects.create(
+            user=self.customer,
+            name=self.customer.get_full_name(),
+            email=self.customer.email,
+            message='New message invalidates cached chat.',
+        )
+
+        self.assertIsNone(get_admin_cache('admin_chat'))
+        refreshed_response = self.client.get('/api/admin/chat')
+        self.assertEqual(refreshed_response.json()['messages'][0]['message'], 'New message invalidates cached chat.')
+        self.assertEqual(get_admin_cache('customer_chat', scope=str(self.customer.pk)), None)
 
     @patch('api.views.queue_password_reset_email')
     def test_unknown_email_gets_generic_response_without_queueing_mail(self, queue_reset_email):
