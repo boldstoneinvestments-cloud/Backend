@@ -6,6 +6,8 @@ from datetime import timedelta
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.tokens import default_token_generator
+from django.core.exceptions import ValidationError
+from django.core.validators import EmailValidator
 from django.db import transaction
 from django.http import JsonResponse
 from django.utils.encoding import force_bytes
@@ -15,6 +17,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_KEY, admin_two_factor_status as get_admin_two_factor_status, begin_admin_two_factor, complete_admin_two_factor
 from .models import AdminActivity, AdminPresence, ChatMessage, LeaseApplication, Order
+from email_service import send_password_reset_email
 from shop.models import ShopOrder
 
 MAX_CHAT_FILE_SIZE = 5 * 1024 * 1024
@@ -445,14 +448,37 @@ def admin_customer_password_reset_link(request, user_id):
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     token = default_token_generator.make_token(user)
     reset_url = f'{frontend_url}/account/password-reset/confirm/{uid}/{token}'
+    try:
+        EmailValidator()(user.email)
+        email_is_valid = True
+    except ValidationError:
+        email_is_valid = False
+    email_sent = email_is_valid and send_password_reset_email(user, reset_url)
     log_admin_activity(
         request,
         'Generated customer password reset link',
         target_type='customer',
         target_id=user.pk,
-        details={'user_id': user.pk},
+        details={'user_id': user.pk, 'email_sent': email_sent},
     )
-    return JsonResponse({'success': True, 'reset_url': reset_url})
+    if email_sent:
+        return JsonResponse({
+            'success': True,
+            'email_sent': True,
+            'message': f'Password reset email sent to {user.email}.',
+        })
+
+    message = (
+        'The customer email address is invalid. Copy and share the reset link instead.'
+        if not email_is_valid else
+        'Email delivery is unavailable. Copy and share the reset link instead.'
+    )
+    return JsonResponse({
+        'success': True,
+        'email_sent': False,
+        'message': message,
+        'reset_url': reset_url,
+    })
 
 
 @admin_required

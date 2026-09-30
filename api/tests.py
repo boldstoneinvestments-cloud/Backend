@@ -487,8 +487,8 @@ class PasswordResetTests(TestCase):
         self.admin.refresh_from_db()
         self.assertTrue(self.admin.check_password('new-admin-password'))
 
-    @patch('api.views.send_password_reset_email')
-    def test_verified_admin_can_generate_customer_reset_link_without_email(self, send_reset_email):
+    @patch('api.admin_views.send_password_reset_email', return_value=True)
+    def test_verified_admin_sends_customer_reset_email(self, send_reset_email):
         self.authenticate_admin_with_totp()
 
         response = self.client.post(
@@ -496,7 +496,8 @@ class PasswordResetTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        reset_url = response.json()['reset_url']
+        self.assertTrue(response.json()['email_sent'])
+        reset_url = send_reset_email.call_args.args[1]
         self.assertTrue(reset_url.startswith('https://www.boldstoneinvestments.com/account/password-reset/confirm/'))
         _, _, _, _, uid, token = reset_url.rsplit('/', 5)
         confirmation = self.client.post(
@@ -508,6 +509,33 @@ class PasswordResetTests(TestCase):
         self.assertEqual(confirmation.status_code, 200)
         self.customer.refresh_from_db()
         self.assertTrue(self.customer.check_password('new-customer-password'))
+
+    @patch('api.admin_views.send_password_reset_email', return_value=False)
+    def test_customer_gets_copyable_reset_link_when_email_delivery_fails(self, send_reset_email):
+        self.authenticate_admin_with_totp()
+
+        response = self.client.post(
+            f'/api/admin/customers/{self.customer.pk}/password-reset-link',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()['email_sent'])
+        self.assertIn('reset_url', response.json())
+        send_reset_email.assert_called_once()
+
+    @patch('api.admin_views.send_password_reset_email')
+    def test_invalid_customer_email_skips_email_and_returns_copyable_link(self, send_reset_email):
+        self.authenticate_admin_with_totp()
+        self.customer.email = 'not-an-email'
+        self.customer.save(update_fields=['email'])
+
+        response = self.client.post(
+            f'/api/admin/customers/{self.customer.pk}/password-reset-link',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()['email_sent'])
+        self.assertIn('reset_url', response.json())
         send_reset_email.assert_not_called()
 
     def test_customer_reset_link_requires_verified_admin(self):
