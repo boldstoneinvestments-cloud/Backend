@@ -10,10 +10,11 @@ from django.core.management import call_command
 from django.core import signing
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import TestCase
+from django.test import Client, TestCase
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, ChatMessage, Order
+from api.views import customer_token
 from email_service import queue_password_reset_email, send_password_reset_email
 
 
@@ -568,6 +569,25 @@ class PasswordResetTests(TestCase):
         response = self.client.post('/api/admin/customers/999999/password-reset-link')
 
         self.assertEqual(response.status_code, 404)
+
+    def test_admin_can_sign_out_customer_sessions_and_bearer_tokens(self):
+        customer_client = Client()
+        customer_client.force_login(self.customer)
+        old_token = customer_token(self.customer)
+        token_response = self.client.get('/api/account/me', HTTP_AUTHORIZATION=f'Bearer {old_token}')
+        session_response = customer_client.get('/api/account/me')
+        self.assertTrue(token_response.json()['authenticated'])
+        self.assertTrue(session_response.json()['authenticated'])
+        self.authenticate_admin_with_totp()
+
+        response = self.client.post(f'/api/admin/customers/{self.customer.pk}/logout')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.client.get('/api/account/me', HTTP_AUTHORIZATION=f'Bearer {old_token}').json()['authenticated'])
+        self.assertFalse(customer_client.get('/api/account/me').json()['authenticated'])
+        self.assertTrue(self.customer.check_password('old-customer-password'))
+        new_token = customer_token(self.customer)
+        self.assertTrue(self.client.get('/api/account/me', HTTP_AUTHORIZATION=f'Bearer {new_token}').json()['authenticated'])
 
     def test_admin_customer_list_defers_record_details_until_selected(self):
         self.authenticate_admin_with_totp()

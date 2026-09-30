@@ -8,6 +8,7 @@ from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
+from django.contrib.sessions.models import Session
 from django.db import transaction
 from django.http import JsonResponse
 from django.utils.encoding import force_bytes
@@ -16,7 +17,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_KEY, admin_two_factor_status as get_admin_two_factor_status, begin_admin_two_factor, complete_admin_two_factor
-from .models import AdminActivity, AdminPresence, ChatMessage, LeaseApplication, Order
+from .models import AdminActivity, AdminPresence, ChatMessage, CustomerProfile, LeaseApplication, Order
 from email_service import queue_password_reset_email
 from shop.models import ShopOrder
 
@@ -529,6 +530,37 @@ def admin_customer_password_reset_link(request, user_id):
         'message': message,
         'reset_url': reset_url,
     })
+
+
+@csrf_exempt
+@admin_required
+def admin_customer_logout(request, user_id):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    user = User.objects.filter(pk=user_id, is_staff=False).first()
+    if user is None:
+        return JsonResponse({'error': 'Customer account not found'}, status=404)
+
+    profile, _ = CustomerProfile.objects.get_or_create(user=user)
+    profile.auth_version += 1
+    profile.save(update_fields=['auth_version'])
+
+    session_keys = []
+    for session in Session.objects.filter(expire_date__gt=timezone.now()).iterator():
+        if session.get_decoded().get('_auth_user_id') == str(user.pk):
+            session_keys.append(session.session_key)
+    if session_keys:
+        Session.objects.filter(session_key__in=session_keys).delete()
+
+    log_admin_activity(
+        request,
+        'Signed customer out of all devices',
+        target_type='customer',
+        target_id=user.pk,
+        details={'user_id': user.pk, 'sessions_revoked': len(session_keys)},
+    )
+    return JsonResponse({'success': True, 'sessions_revoked': len(session_keys)})
 
 
 @admin_required

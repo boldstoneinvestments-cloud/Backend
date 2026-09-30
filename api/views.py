@@ -86,7 +86,8 @@ def process_chat_ai_followup(user_id, message_id):
 
 
 def customer_token(user):
-    return signing.dumps({'user_id': user.id}, salt='customer-auth')
+    profile, _ = CustomerProfile.objects.get_or_create(user=user)
+    return signing.dumps({'user_id': user.id, 'auth_version': profile.auth_version}, salt='customer-auth')
 
 
 def token_user(request):
@@ -95,7 +96,13 @@ def token_user(request):
         return None
     try:
         payload = signing.loads(header[7:], salt='customer-auth', max_age=CUSTOMER_TOKEN_MAX_AGE)
-        return User.objects.filter(id=payload.get('user_id'), is_active=True, is_staff=False).first()
+        user = User.objects.filter(id=payload.get('user_id'), is_active=True, is_staff=False).first()
+        if user is None:
+            return None
+        profile, _ = CustomerProfile.objects.get_or_create(user=user)
+        if payload.get('auth_version', 0) != profile.auth_version:
+            return None
+        return user
     except (signing.BadSignature, TypeError, ValueError):
         return None
 
