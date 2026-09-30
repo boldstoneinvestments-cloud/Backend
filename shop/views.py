@@ -25,6 +25,7 @@ def products(request):
             'desc': product.description,
             'badge': product.badge,
             'varieties': product.varieties,
+            'details': product.details,
         })
     ordered = {k: catalog[k] for k in CATEGORY_ORDER if k in catalog}
     ordered.update({k: v for k, v in catalog.items() if k not in ordered})

@@ -17,6 +17,7 @@ class Product(models.Model):
     description = models.TextField()
     badge = models.CharField(max_length=80, blank=True)
     varieties = models.JSONField(default=list, blank=True)
+    details = models.JSONField(default=dict, blank=True)
     active = models.BooleanField(default=True)
 
     class Meta:

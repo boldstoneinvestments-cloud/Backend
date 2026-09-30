@@ -7,7 +7,7 @@ from datetime import timedelta
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
-from django.core.validators import EmailValidator
+from django.core.validators import EmailValidator, URLValidator
 from django.contrib.sessions.models import Session
 from django.db import transaction
 from django.http import JsonResponse
@@ -20,7 +20,7 @@ from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_K
 from .admin_cache import cache_json_response
 from .models import AdminActivity, AdminPresence, ChatMessage, CustomerProfile, LeaseApplication, Order
 from email_service import queue_password_reset_email
-from shop.models import ShopOrder
+from shop.models import Product, ShopOrder
 
 MAX_CHAT_FILE_SIZE = 5 * 1024 * 1024
 ALLOWED_CHAT_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx', '.txt', '.csv'}
@@ -32,6 +32,89 @@ ADMIN_IDENTITIES = {
     'MOSES ALICWAMU': 'https://address-restaurant2.odoo.com/web/image/1571-51dfbae5/Moses%20Photo%20-%20up%20to%20date.webp',
     'HABIB TUMWESIGE': 'https://address-restaurant2.odoo.com/web/image/1982-2595a3af/Habib%20Salah.webp',
 }
+SHOP_PRODUCT_CATEGORIES = dict(Product.CATEGORY_CHOICES)
+
+
+def serialize_shop_product(product):
+    return {
+        'id': product.id,
+        'category': product.category,
+        'name': product.name,
+        'price': product.price,
+        'unit': product.unit,
+        'image': product.image,
+        'description': product.description,
+        'badge': product.badge,
+        'varieties': product.varieties,
+        'details': product.details,
+        'active': product.active,
+    }
+
+
+def validate_shop_product_data(data, existing=None):
+    product_id = str(data.get('id', existing.id if existing else '')).strip()
+    category = str(data.get('category', existing.category if existing else '')).strip()
+    name = str(data.get('name', existing.name if existing else '')).strip()
+    unit = str(data.get('unit', existing.unit if existing else '')).strip()
+    image = str(data.get('image', existing.image if existing else '')).strip()
+    description = str(data.get('description', existing.description if existing else '')).strip()
+    badge = str(data.get('badge', existing.badge if existing else '')).strip()
+    raw_price = data.get('price', existing.price if existing else None)
+    varieties = data.get('varieties', existing.varieties if existing else [])
+    details = data.get('details', existing.details if existing else {})
+    active = data.get('active', existing.active if existing else True)
+
+    if not product_id or len(product_id) > 80:
+        return None, 'Product ID is required and must be 80 characters or fewer.'
+    if existing and product_id != existing.id:
+        return None, 'Product ID cannot be changed.'
+    if category not in SHOP_PRODUCT_CATEGORIES:
+        return None, 'Choose a valid product category.'
+    if not name or len(name) > 200:
+        return None, 'Product name is required and must be 200 characters or fewer.'
+    if not unit or len(unit) > 50:
+        return None, 'Unit is required and must be 50 characters or fewer.'
+    if isinstance(raw_price, bool):
+        return None, 'Price must be a non-negative whole number.'
+    try:
+        price = int(raw_price)
+    except (TypeError, ValueError):
+        return None, 'Price must be a non-negative whole number.'
+    if price < 0 or str(price) != str(raw_price).strip():
+        return None, 'Price must be a non-negative whole number.'
+    try:
+        URLValidator(schemes=['http', 'https'])(image)
+    except ValidationError:
+        return None, 'Enter a valid product image URL.'
+    if not isinstance(varieties, list) or any(not isinstance(value, str) or not value.strip() for value in varieties):
+        return None, 'Varieties must be a list of non-empty names.'
+    if any(len(value.strip()) > 80 for value in varieties):
+        return None, 'Each variety must be 80 characters or fewer.'
+    if not isinstance(details, dict):
+        return None, 'Additional details must be a set of label/value pairs.'
+    normalized_details = {}
+    for label, value in details.items():
+        label = str(label).strip()
+        value = str(value).strip()
+        if not label or len(label) > 80 or len(value) > 2000:
+            return None, 'Detail labels must be 1-80 characters and values 2,000 characters or fewer.'
+        normalized_details[label] = value
+    if not isinstance(active, bool):
+        return None, 'Active status must be true or false.'
+
+    return {
+        'id': product_id,
+        'category': category,
+        'name': name,
+        'price': price,
+        'unit': unit,
+        'image': image,
+        'description': description,
+        'badge': badge[:80],
+        'varieties': [value.strip() for value in varieties],
+        'details': normalized_details,
+        'active': active,
+    }, None
 
 
 def staff_required(view=None, allow_identity_selection=False):
@@ -348,6 +431,55 @@ def admin_user_detail(request, user_id):
     user.save()
     log_admin_activity(request, 'Updated admin account', 'admin account', user.username, {'user_id': user.id, 'changed_fields': changed_fields})
     return JsonResponse({'success': True, 'user': serialize_admin_user(user)})
+
+
+@csrf_exempt
+@admin_required
+def admin_shop_products(request):
+    if request.method == 'GET':
+        return JsonResponse({'products': [serialize_shop_product(product) for product in Product.objects.all()]})
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({'error': 'Invalid product data.'}, status=400)
+    product_data, error = validate_shop_product_data(data)
+    if error:
+        return JsonResponse({'error': error}, status=400)
+    if Product.objects.filter(pk=product_data['id']).exists():
+        return JsonResponse({'error': 'A product with this ID already exists.'}, status=409)
+    product = Product.objects.create(**product_data)
+    log_admin_activity(request, 'Created shop product', 'shop product', product.id, {'category': product.category})
+    return JsonResponse({'success': True, 'product': serialize_shop_product(product)}, status=201)
+
+
+@csrf_exempt
+@admin_required
+def admin_shop_product_detail(request, product_id):
+    if request.method != 'PUT':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({'error': 'Invalid product data.'}, status=400)
+    product = Product.objects.filter(pk=product_id).first()
+    if product is None:
+        return JsonResponse({'error': 'Product not found.'}, status=404)
+    product_data, error = validate_shop_product_data(data, existing=product)
+    if error:
+        return JsonResponse({'error': error}, status=400)
+    changed_fields = [field for field, value in product_data.items() if getattr(product, field) != value]
+    for field, value in product_data.items():
+        setattr(product, field, value)
+    if changed_fields:
+        product.save(update_fields=changed_fields)
+    log_admin_activity(request, 'Updated shop product', 'shop product', product.id, {'changed_fields': changed_fields})
+    return JsonResponse({'success': True, 'product': serialize_shop_product(product)})
 
 
 @csrf_exempt

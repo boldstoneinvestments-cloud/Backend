@@ -18,6 +18,7 @@ from api.admin_cache import get_admin_cache, set_admin_cache
 from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, ChatMessage, Order
 from api.views import customer_token
 from email_service import queue_password_reset_email, send_password_reset_email
+from shop.models import Product as ShopProduct
 
 
 User = get_user_model()
@@ -590,6 +591,47 @@ class PasswordResetTests(TestCase):
         self.assertTrue(self.customer.check_password('old-customer-password'))
         new_token = customer_token(self.customer)
         self.assertTrue(self.client.get('/api/account/me', HTTP_AUTHORIZATION=f'Bearer {new_token}').json()['authenticated'])
+
+    def test_verified_admin_can_create_and_edit_shop_products_and_details(self):
+        self.authenticate_admin_with_totp()
+        product_data = {
+            'id': 'admin-product',
+            'category': 'roasted',
+            'name': 'Admin Added Roast',
+            'price': 25000,
+            'unit': 'per bag',
+            'image': 'https://example.com/roast.jpg',
+            'description': 'Freshly roasted coffee.',
+            'badge': 'New',
+            'varieties': [],
+            'details': {'Roast level': 'Medium', 'Origin': 'Uganda'},
+            'active': True,
+        }
+
+        created = self.client.post('/api/admin/shop/products', product_data, content_type='application/json')
+
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.json()['product']['details']['Origin'], 'Uganda')
+        public_products = self.client.get('/api/shop/products').json()
+        public_product = next(product for product in public_products['roasted'] if product['id'] == 'admin-product')
+        self.assertEqual(public_product['details']['Roast level'], 'Medium')
+
+        product_data.update({
+            'name': 'Updated Admin Roast',
+            'active': False,
+            'details': {'Roast level': 'Dark', 'Process': 'Washed'},
+        })
+        updated = self.client.put(
+            '/api/admin/shop/products/admin-product',
+            product_data,
+            content_type='application/json',
+        )
+
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()['product']['name'], 'Updated Admin Roast')
+        self.assertFalse(ShopProduct.objects.get(pk='admin-product').active)
+        public_products = self.client.get('/api/shop/products').json()
+        self.assertNotIn('admin-product', [product['id'] for product in public_products['roasted']])
 
     def test_admin_customer_list_defers_record_details_until_selected(self):
         self.authenticate_admin_with_totp()
