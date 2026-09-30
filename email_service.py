@@ -1,12 +1,14 @@
 import html
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import resend
 
 logger = logging.getLogger(__name__)
 LOGO_URL = 'https://res.cloudinary.com/cwj8d38f/image/upload/v1789729870/Boldstone_logo_hiv7pl.jpg'
 ADMIN_ORDER_EMAIL = os.getenv('RESEND_ADMIN_EMAIL', 'boldstone.investments@gmail.com').strip()
+_PASSWORD_RESET_EMAIL_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix='password-reset-email')
 
 
 def send_password_reset_email(user, reset_url):
@@ -40,6 +42,18 @@ def send_password_reset_email(user, reset_url):
     except Exception:
         logger.exception('Unable to send password reset email.')
         return False
+
+
+def queue_password_reset_email(user, reset_url):
+    if not os.getenv('RESEND_API_KEY', '').strip() or not os.getenv('RESEND_FROM_EMAIL', '').strip():
+        logger.error('Password reset email skipped: RESEND_API_KEY and RESEND_FROM_EMAIL must be configured.')
+        return False
+    try:
+        _PASSWORD_RESET_EMAIL_EXECUTOR.submit(send_password_reset_email, user, reset_url)
+    except RuntimeError:
+        logger.exception('Unable to queue password reset email.')
+        return False
+    return True
 
 
 def send_chat_notification(msg, ticket=False):

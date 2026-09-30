@@ -17,7 +17,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_KEY, admin_two_factor_status as get_admin_two_factor_status, begin_admin_two_factor, complete_admin_two_factor
 from .models import AdminActivity, AdminPresence, ChatMessage, LeaseApplication, Order
-from email_service import send_password_reset_email
+from email_service import queue_password_reset_email
 from shop.models import ShopOrder
 
 MAX_CHAT_FILE_SIZE = 5 * 1024 * 1024
@@ -453,19 +453,19 @@ def admin_customer_password_reset_link(request, user_id):
         email_is_valid = True
     except ValidationError:
         email_is_valid = False
-    email_sent = email_is_valid and send_password_reset_email(user, reset_url)
+    email_queued = email_is_valid and queue_password_reset_email(user, reset_url)
     log_admin_activity(
         request,
         'Generated customer password reset link',
         target_type='customer',
         target_id=user.pk,
-        details={'user_id': user.pk, 'email_sent': email_sent},
+        details={'user_id': user.pk, 'email_queued': email_queued},
     )
-    if email_sent:
+    if email_queued:
         return JsonResponse({
             'success': True,
-            'email_sent': True,
-            'message': f'Password reset email sent to {user.email}.',
+            'email_queued': True,
+            'message': f'Password reset email queued for {user.email}.',
         })
 
     message = (
@@ -475,7 +475,7 @@ def admin_customer_password_reset_link(request, user_id):
     )
     return JsonResponse({
         'success': True,
-        'email_sent': False,
+        'email_queued': False,
         'message': message,
         'reset_url': reset_url,
     })

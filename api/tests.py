@@ -14,6 +14,7 @@ from django.test import TestCase
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, ChatMessage
+from email_service import queue_password_reset_email, send_password_reset_email
 
 
 User = get_user_model()
@@ -67,6 +68,19 @@ class PasswordResetTests(TestCase):
         response = self.verify_admin_code(self.totp_code(device, timestamp), timestamp)
         self.assertEqual(response.status_code, 200)
         return response
+
+    @patch.dict('os.environ', {
+        'RESEND_API_KEY': 'test-api-key',
+        'RESEND_FROM_EMAIL': 'reset@example.com',
+    })
+    @patch('email_service._PASSWORD_RESET_EMAIL_EXECUTOR.submit')
+    def test_password_reset_email_is_queued_without_waiting(self, submit):
+        reset_url = 'https://www.boldstoneinvestments.com/account/password-reset/confirm/uid/token'
+
+        queued = queue_password_reset_email(self.customer, reset_url)
+
+        self.assertTrue(queued)
+        submit.assert_called_once_with(send_password_reset_email, self.customer, reset_url)
 
     @patch.dict('os.environ', {'RECAPTCHA_SECRET_KEY': 'test-secret'})
     @patch('api.views.verify_recaptcha', return_value=False)
@@ -431,8 +445,10 @@ class PasswordResetTests(TestCase):
         self.assertEqual(event.actor, self.admin)
         self.assertEqual(event.details['title'], 'Coffee update')
 
-    @patch('api.views.send_password_reset_email', return_value=True)
-    def test_customer_can_reset_password_with_email_link(self, send_reset_email):
+    @patch('api.views.queue_password_reset_email', return_value=True)
+    def test_google_customer_can_reset_password_with_email_link(self, queue_reset_email):
+        self.customer.set_unusable_password()
+        self.customer.save(update_fields=['password'])
         response = self.client.post(
             '/api/account/password-reset',
             {'email': self.customer.email},
@@ -441,7 +457,7 @@ class PasswordResetTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['success'])
-        reset_url = send_reset_email.call_args.args[1]
+        reset_url = queue_reset_email.call_args.args[1]
         _, _, _, _, uid, token = reset_url.rsplit('/', 5)
         confirmation = self.client.post(
             '/api/account/password-reset/confirm',
@@ -453,8 +469,10 @@ class PasswordResetTests(TestCase):
         self.customer.refresh_from_db()
         self.assertTrue(self.customer.check_password('new-customer-password'))
 
-    @patch('api.views.send_password_reset_email', return_value=True)
-    def test_admin_reset_is_role_scoped_and_token_is_single_use(self, send_reset_email):
+    @patch('api.views.queue_password_reset_email', return_value=True)
+    def test_admin_reset_is_role_scoped_and_token_is_single_use(self, queue_reset_email):
+        self.admin.set_unusable_password()
+        self.admin.save(update_fields=['password'])
         response = self.client.post(
             '/api/admin/password-reset',
             {'email': self.admin.email},
@@ -462,7 +480,7 @@ class PasswordResetTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        reset_url = send_reset_email.call_args.args[1]
+        reset_url = queue_reset_email.call_args.args[1]
         _, _, _, _, uid, token = reset_url.rsplit('/', 5)
         wrong_role = self.client.post(
             '/api/account/password-reset/confirm',
@@ -487,8 +505,8 @@ class PasswordResetTests(TestCase):
         self.admin.refresh_from_db()
         self.assertTrue(self.admin.check_password('new-admin-password'))
 
-    @patch('api.admin_views.send_password_reset_email', return_value=True)
-    def test_verified_admin_sends_customer_reset_email(self, send_reset_email):
+    @patch('api.admin_views.queue_password_reset_email', return_value=True)
+    def test_verified_admin_queues_customer_reset_email(self, queue_reset_email):
         self.authenticate_admin_with_totp()
 
         response = self.client.post(
@@ -496,8 +514,8 @@ class PasswordResetTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()['email_sent'])
-        reset_url = send_reset_email.call_args.args[1]
+        self.assertTrue(response.json()['email_queued'])
+        reset_url = queue_reset_email.call_args.args[1]
         self.assertTrue(reset_url.startswith('https://www.boldstoneinvestments.com/account/password-reset/confirm/'))
         _, _, _, _, uid, token = reset_url.rsplit('/', 5)
         confirmation = self.client.post(
@@ -510,7 +528,7 @@ class PasswordResetTests(TestCase):
         self.customer.refresh_from_db()
         self.assertTrue(self.customer.check_password('new-customer-password'))
 
-    @patch('api.admin_views.send_password_reset_email', return_value=False)
+    @patch('api.admin_views.queue_password_reset_email', return_value=False)
     def test_customer_gets_copyable_reset_link_when_email_delivery_fails(self, send_reset_email):
         self.authenticate_admin_with_totp()
 
@@ -519,12 +537,12 @@ class PasswordResetTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json()['email_sent'])
+        self.assertFalse(response.json()['email_queued'])
         self.assertIn('reset_url', response.json())
         send_reset_email.assert_called_once()
 
-    @patch('api.admin_views.send_password_reset_email')
-    def test_invalid_customer_email_skips_email_and_returns_copyable_link(self, send_reset_email):
+    @patch('api.admin_views.queue_password_reset_email')
+    def test_invalid_customer_email_skips_email_and_returns_copyable_link(self, queue_reset_email):
         self.authenticate_admin_with_totp()
         self.customer.email = 'not-an-email'
         self.customer.save(update_fields=['email'])
@@ -534,9 +552,9 @@ class PasswordResetTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json()['email_sent'])
+        self.assertFalse(response.json()['email_queued'])
         self.assertIn('reset_url', response.json())
-        send_reset_email.assert_not_called()
+        queue_reset_email.assert_not_called()
 
     def test_customer_reset_link_requires_verified_admin(self):
         response = self.client.post(
@@ -551,8 +569,8 @@ class PasswordResetTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
-    @patch('api.views.send_password_reset_email')
-    def test_unknown_email_gets_generic_response_without_sending_mail(self, send_reset_email):
+    @patch('api.views.queue_password_reset_email')
+    def test_unknown_email_gets_generic_response_without_queueing_mail(self, queue_reset_email):
         response = self.client.post(
             '/api/account/password-reset',
             {'email': 'unknown@example.com'},
@@ -561,7 +579,7 @@ class PasswordResetTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('If an account matches', response.json()['message'])
-        send_reset_email.assert_not_called()
+        queue_reset_email.assert_not_called()
 
     @patch.dict('os.environ', {
         'GOOGLE_CLIENT_ID': 'client-id',

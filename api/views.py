@@ -18,7 +18,7 @@ from django.db import connection
 from django.views.decorators.csrf import csrf_exempt
 from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_KEY
 from .models import ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
-from email_service import send_lease_application_confirmation, send_password_reset_email
+from email_service import queue_password_reset_email, send_lease_application_confirmation
 
 ESTATE = {
     'name': 'Kyenjojo Coffee Estate',
@@ -281,14 +281,17 @@ def request_password_reset(request, admin=False):
     email = str(data.get('email', '')).strip().lower()
     role_filter = {'is_staff': True} if admin else {'is_staff': False}
     user = User.objects.filter(email__iexact=email, is_active=True, **role_filter).first() if email else None
-    if user and user.has_usable_password():
+    if user:
         frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173').strip().rstrip('/')
         role_path = 'admin' if admin else 'account'
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
         reset_url = f'{frontend_url}/{role_path}/password-reset/confirm/{uid}/{token}'
-        send_password_reset_email(user, reset_url)
-    return JsonResponse({'success': True, 'message': 'If an account matches that email, a reset link has been sent.'})
+        queue_password_reset_email(user, reset_url)
+    return JsonResponse({
+        'success': True,
+        'message': 'If an account matches that email, reset instructions will be sent if email delivery is available.',
+    })
 
 
 def confirm_password_reset(request, admin=False):
