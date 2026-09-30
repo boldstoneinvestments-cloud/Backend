@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from functools import wraps
 from pathlib import Path
 from datetime import timedelta
@@ -15,6 +16,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from cloudinary.utils import api_sign_request
 
 from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_KEY, admin_two_factor_status as get_admin_two_factor_status, begin_admin_two_factor, complete_admin_two_factor
 from .admin_cache import cache_json_response
@@ -485,6 +487,30 @@ def admin_shop_product_detail(request, product_id):
         product.save(update_fields=changed_fields)
     log_admin_activity(request, 'Updated shop product', 'shop product', product.id, {'changed_fields': changed_fields})
     return JsonResponse({'success': True, 'product': serialize_shop_product(product)})
+
+
+@csrf_exempt
+@admin_required
+def admin_cloudinary_upload_signature(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    cloud_name = os.getenv('CLOUDINARY_CLOUD_NAME', '').strip()
+    api_key = os.getenv('CLOUDINARY_API_KEY', '').strip()
+    api_secret = os.getenv('CLOUDINARY_API_SECRET', '').strip()
+    if not cloud_name or not api_key or not api_secret:
+        return JsonResponse({'error': 'Cloudinary uploads are not configured on the backend.'}, status=503)
+
+    timestamp = int(time.time())
+    folder = 'boldstone/products'
+    signed_parameters = {'folder': folder, 'timestamp': timestamp}
+    return JsonResponse({
+        'cloud_name': cloud_name,
+        'api_key': api_key,
+        'timestamp': timestamp,
+        'folder': folder,
+        'signature': api_sign_request(signed_parameters, api_secret),
+    })
 
 
 @csrf_exempt

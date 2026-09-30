@@ -17,6 +17,8 @@ Create the Railway service from this repository with the service root directory 
 
 For shared caching across backend workers, add a Railway Redis service and set this service's `REDIS_URL` variable to the Redis service's private connection URL. Admin users, customers, orders, lease applications, chats, activity, product catalog, estate totals, and customer chat responses are cached and invalidated when their source data changes. Without Redis, the backend falls back to per-process memory caching.
 
+For signed shop image uploads, set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in the Railway **Backend** service variables. The API secret is only used by the backend to sign uploads and is never sent to the browser.
+
 Set the matching reCAPTCHA secret as `RECAPTCHA_SECRET_KEY` in this backend service. The public site key belongs in the frontend build environment; do not put it in this backend-only setting or expose the secret in frontend variables.
 
 Set `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in Railway variables. The deployment creates the admin account automatically, and you can view shop orders at `https://your-backend-domain/admin/shop/shoporder/`.

@@ -637,6 +637,39 @@ class PasswordResetTests(TestCase):
         public_products = self.client.get('/api/shop/products').json()
         self.assertNotIn('admin-product', [product['id'] for product in public_products['roasted']])
 
+    @patch.dict('os.environ', {
+        'CLOUDINARY_CLOUD_NAME': 'boldstone-test',
+        'CLOUDINARY_API_KEY': 'public-test-key',
+        'CLOUDINARY_API_SECRET': 'private-test-secret',
+    })
+    @patch('api.admin_views.api_sign_request', return_value='short-lived-signature')
+    def test_verified_admin_can_request_cloudinary_upload_signature(self, sign_request):
+        self.authenticate_admin_with_totp()
+
+        response = self.client.post('/api/admin/shop/products/upload-signature')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['cloud_name'], 'boldstone-test')
+        self.assertEqual(response.json()['api_key'], 'public-test-key')
+        self.assertEqual(response.json()['folder'], 'boldstone/products')
+        self.assertEqual(response.json()['signature'], 'short-lived-signature')
+        self.assertNotIn('api_secret', response.json())
+        sign_request.assert_called_once_with(
+            {'folder': 'boldstone/products', 'timestamp': response.json()['timestamp']},
+            'private-test-secret',
+        )
+
+    @patch.dict('os.environ', {
+        'CLOUDINARY_CLOUD_NAME': '',
+        'CLOUDINARY_API_KEY': '',
+        'CLOUDINARY_API_SECRET': '',
+    })
+    def test_cloudinary_signature_reports_missing_railway_variables(self):
+        self.authenticate_admin_with_totp()
+        response = self.client.post('/api/admin/shop/products/upload-signature')
+
+        self.assertEqual(response.status_code, 503)
+
     def test_admin_customer_list_defers_record_details_until_selected(self):
         self.authenticate_admin_with_totp()
         Order.objects.create(

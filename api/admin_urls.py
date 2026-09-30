@@ -16,6 +16,7 @@ urlpatterns = [
     path('users', admin_views.admin_users),
     path('users/<int:user_id>', admin_views.admin_user_detail),
     path('shop/products', admin_views.admin_shop_products),
+    path('shop/products/upload-signature', admin_views.admin_cloudinary_upload_signature),
     path('shop/products/<str:product_id>', admin_views.admin_shop_product_detail),
     path('customers', admin_views.admin_customers),
     path('customers/<str:email>/delete', admin_views.admin_customer_delete),
