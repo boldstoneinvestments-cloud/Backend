@@ -488,6 +488,42 @@ class PasswordResetTests(TestCase):
         self.assertTrue(self.admin.check_password('new-admin-password'))
 
     @patch('api.views.send_password_reset_email')
+    def test_verified_admin_can_generate_customer_reset_link_without_email(self, send_reset_email):
+        self.authenticate_admin_with_totp()
+
+        response = self.client.post(
+            f'/api/admin/customers/{self.customer.pk}/password-reset-link',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        reset_url = response.json()['reset_url']
+        self.assertTrue(reset_url.startswith('https://www.boldstoneinvestments.com/account/password-reset/confirm/'))
+        _, _, _, _, uid, token = reset_url.rsplit('/', 5)
+        confirmation = self.client.post(
+            '/api/account/password-reset/confirm',
+            {'uid': uid, 'token': token, 'password': 'new-customer-password'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(confirmation.status_code, 200)
+        self.customer.refresh_from_db()
+        self.assertTrue(self.customer.check_password('new-customer-password'))
+        send_reset_email.assert_not_called()
+
+    def test_customer_reset_link_requires_verified_admin(self):
+        response = self.client.post(
+            f'/api/admin/customers/{self.customer.pk}/password-reset-link',
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_customer_reset_link_rejects_contacts_without_accounts(self):
+        self.authenticate_admin_with_totp()
+        response = self.client.post('/api/admin/customers/999999/password-reset-link')
+
+        self.assertEqual(response.status_code, 404)
+
+    @patch('api.views.send_password_reset_email')
     def test_unknown_email_gets_generic_response_without_sending_mail(self, send_reset_email):
         response = self.client.post(
             '/api/account/password-reset',

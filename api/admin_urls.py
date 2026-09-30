@@ -17,6 +17,7 @@ urlpatterns = [
     path('users/<int:user_id>', admin_views.admin_user_detail),
     path('customers', admin_views.admin_customers),
     path('customers/<str:email>/delete', admin_views.admin_customer_delete),
+    path('customers/<int:user_id>/password-reset-link', admin_views.admin_customer_password_reset_link),
     path('orders', admin_views.admin_orders),
     path('orders/<str:order_id>', admin_views.admin_delete_order),
     path('lease-applications', admin_views.admin_lease_applications),

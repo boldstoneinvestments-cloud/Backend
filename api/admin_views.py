@@ -1,11 +1,15 @@
 import json
+import os
 from functools import wraps
 from pathlib import Path
 from datetime import timedelta
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
 from django.http import JsonResponse
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
@@ -425,6 +429,30 @@ def admin_customer_delete(request, email):
         'chat_messages': messages_deleted,
     })
     return JsonResponse({'success': True})
+
+
+@csrf_exempt
+@admin_required
+def admin_customer_password_reset_link(request, user_id):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    user = User.objects.filter(pk=user_id, is_staff=False, is_active=True).first()
+    if user is None:
+        return JsonResponse({'error': 'Active customer account not found'}, status=404)
+
+    frontend_url = os.getenv('FRONTEND_URL', '').strip().rstrip('/') or 'https://www.boldstoneinvestments.com'
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    reset_url = f'{frontend_url}/account/password-reset/confirm/{uid}/{token}'
+    log_admin_activity(
+        request,
+        'Generated customer password reset link',
+        target_type='customer',
+        target_id=user.pk,
+        details={'user_id': user.pk},
+    )
+    return JsonResponse({'success': True, 'reset_url': reset_url})
 
 
 @admin_required
