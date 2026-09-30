@@ -459,6 +459,11 @@ def admin_shop_products(request):
 @csrf_exempt
 @admin_required
 def admin_shop_product_detail(request, product_id):
+    if request.method == 'GET':
+        product = Product.objects.filter(pk=product_id).first()
+        if product is None:
+            return JsonResponse({'error': 'Product not found.'}, status=404)
+        return JsonResponse({'product': serialize_shop_product(product)})
     if request.method != 'PUT':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     try:

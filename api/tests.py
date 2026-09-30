@@ -612,6 +612,10 @@ class PasswordResetTests(TestCase):
 
         self.assertEqual(created.status_code, 201)
         self.assertEqual(created.json()['product']['details']['Origin'], 'Uganda')
+        edit_data = self.client.get('/api/admin/shop/products/admin-product')
+        self.assertEqual(edit_data.status_code, 200)
+        self.assertEqual(edit_data.json()['product']['varieties'], [])
+        self.assertEqual(edit_data.json()['product']['details']['Origin'], 'Uganda')
         public_products = self.client.get('/api/shop/products').json()
         public_product = next(product for product in public_products['roasted'] if product['id'] == 'admin-product')
         self.assertEqual(public_product['details']['Roast level'], 'Medium')
