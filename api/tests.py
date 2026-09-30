@@ -1,4 +1,6 @@
 from io import StringIO
+from importlib import import_module
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 import time
@@ -6,6 +8,8 @@ import time
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core import signing
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
 from django.test import TestCase
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -305,6 +309,44 @@ class PasswordResetTests(TestCase):
         )
 
         call_command('reset_admin_two_factor', 'SSEMATA SABIRA', stdout=StringIO())
+
+        self.assertTrue(User.objects.filter(pk=self.admin.pk).exists())
+        self.assertFalse(TOTPDevice.objects.filter(user=self.admin, name='admin:SSEMATA SABIRA').exists())
+        self.assertTrue(TOTPDevice.objects.filter(user=self.admin, name='admin:MOSES ALICWAMU').exists())
+        recovery.refresh_from_db()
+        self.assertEqual(recovery.identity_code_hashes, {'MOSES ALICWAMU': ['moses-hash']})
+
+    def test_deploy_migration_resets_only_ssemata_two_factor(self):
+        TOTPDevice.objects.create(
+            user=self.admin,
+            name='admin:SSEMATA SABIRA',
+            confirmed=True,
+            step=15,
+            digits=6,
+        )
+        TOTPDevice.objects.create(
+            user=self.admin,
+            name='admin:MOSES ALICWAMU',
+            confirmed=True,
+            step=30,
+            digits=6,
+        )
+        recovery = AdminRecoveryCodes.objects.create(
+            user=self.admin,
+            identity_code_hashes={
+                'SSEMATA SABIRA': ['ssemata-hash'],
+                'MOSES ALICWAMU': ['moses-hash'],
+            },
+        )
+        migration = import_module('api.migrations.0013_reset_ssemata_two_factor')
+        migration_apps = MigrationExecutor(connection).loader.project_state(
+            [('api', '0013_reset_ssemata_two_factor')],
+        ).apps
+
+        migration.reset_ssemata_two_factor(
+            migration_apps,
+            SimpleNamespace(connection=connection),
+        )
 
         self.assertTrue(User.objects.filter(pk=self.admin.pk).exists())
         self.assertFalse(TOTPDevice.objects.filter(user=self.admin, name='admin:SSEMATA SABIRA').exists())
