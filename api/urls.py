@@ -16,6 +16,7 @@ urlpatterns = [
     path('estate/invest', views.invest),
     path('orders', views.orders),
     path('contact', views.contact),
+    path('newsletter/subscribe', views.newsletter_subscribe),
     path('blog/posts', views.blog_posts),
     path('chat', views.chat),
     path('chat/messages/<int:message_id>', views.chat_message_actions),

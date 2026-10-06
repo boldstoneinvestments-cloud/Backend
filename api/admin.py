@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import BlogPost, ChatMessage, ContactMessage, Lease, LeaseApplication, Order
+from .models import BlogPost, ChatMessage, ContactMessage, Lease, LeaseApplication, NewsletterSubscriber, Order
 
 
 @admin.register(BlogPost)
@@ -8,6 +8,13 @@ class BlogPostAdmin(admin.ModelAdmin):
     list_filter = ('category', 'is_published')
     search_fields = ('title', 'excerpt', 'author')
     readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(NewsletterSubscriber)
+class NewsletterSubscriberAdmin(admin.ModelAdmin):
+    list_display = ('email', 'subscribed_at')
+    search_fields = ('email',)
+    readonly_fields = ('email', 'subscribed_at')
 
 
 @admin.register(ChatMessage)

@@ -8,7 +8,9 @@ from urllib.request import Request, urlopen
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.tokens import default_token_generator
+from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
+from django.core.validators import EmailValidator
 from django.http import FileResponse, JsonResponse, StreamingHttpResponse
 from django.middleware.csrf import get_token
 from django.core import signing
@@ -18,7 +20,7 @@ from django.db import connection
 from django.views.decorators.csrf import csrf_exempt
 from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_KEY
 from .admin_cache import cache_json_response
-from .models import BlogPost, ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, Order
+from .models import BlogPost, ChatMessage, ContactMessage, CustomerProfile, Lease, LeaseApplication, NewsletterSubscriber, Order
 from email_service import queue_password_reset_email, send_lease_application_confirmation
 
 ESTATE = {
@@ -401,6 +403,24 @@ def contact(request):
                   message.message, settings.DEFAULT_FROM_EMAIL, [settings.EMAIL_TO],
                   reply_to=[message.email])
     return JsonResponse({'success': True})
+
+
+@csrf_exempt
+def newsletter_subscribe(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    data = body(request)
+    email = str((data or {}).get('email', '')).strip().lower()
+    try:
+        EmailValidator()(email)
+    except ValidationError:
+        return JsonResponse({'error': 'Enter a valid email address.'}, status=400)
+
+    _, created = NewsletterSubscriber.objects.get_or_create(email=email)
+    return JsonResponse(
+        {'success': True, 'already_subscribed': not created},
+        status=201 if created else 200,
+    )
 
 
 @customer_required

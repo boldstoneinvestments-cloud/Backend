@@ -15,7 +15,7 @@ from django.test import Client, TestCase
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from api.admin_cache import get_admin_cache, set_admin_cache
-from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, BlogPost, ChatMessage, Order
+from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, BlogPost, ChatMessage, NewsletterSubscriber, Order
 from api.views import customer_token
 from email_service import queue_password_reset_email, send_password_reset_email
 from shop.models import Product as ShopProduct, ShopOrder
@@ -853,3 +853,36 @@ class PasswordResetTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(signing.loads(state, salt='google-oauth-state')['flow'], 'admin')
+
+
+class NewsletterSubscriptionTests(TestCase):
+    def subscribe(self, email):
+        return self.client.post(
+            '/api/newsletter/subscribe',
+            {'email': email},
+            content_type='application/json',
+        )
+
+    def test_valid_email_is_normalized_and_stored(self):
+        response = self.subscribe('  Reader@Example.com  ')
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(NewsletterSubscriber.objects.filter(email='reader@example.com').exists())
+
+    def test_duplicate_email_is_idempotent(self):
+        self.assertEqual(self.subscribe('Reader@Example.com').status_code, 201)
+
+        response = self.subscribe('reader@example.com')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['already_subscribed'])
+        self.assertEqual(NewsletterSubscriber.objects.count(), 1)
+
+    def test_invalid_email_is_rejected(self):
+        response = self.subscribe('not-an-email')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(NewsletterSubscriber.objects.count(), 0)
+
+    def test_subscription_requires_post(self):
+        self.assertEqual(self.client.get('/api/newsletter/subscribe').status_code, 405)
