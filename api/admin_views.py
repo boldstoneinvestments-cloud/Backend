@@ -22,7 +22,7 @@ from cloudinary.utils import api_sign_request
 
 from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_KEY, admin_two_factor_status as get_admin_two_factor_status, begin_admin_two_factor, complete_admin_two_factor
 from .admin_cache import cache_json_response
-from .models import AdminActivity, AdminPresence, BlogPost, ChatMessage, CustomerProfile, LeaseApplication, Order
+from .models import AdminActivity, AdminPresence, BlogPost, ChatMessage, CustomerProfile, LeaseApplication, NewsletterSubscriber, Order
 from email_service import queue_password_reset_email
 from shop.models import Product, ShopOrder
 
@@ -625,6 +625,20 @@ def admin_blog_post_detail(request, post_id):
         post.save(update_fields=changed_fields + ['updated_at'])
     log_admin_activity(request, 'Updated blog post', 'blog post', post.id, {'changed_fields': changed_fields}, page='/admin/blog')
     return JsonResponse({'success': True, 'post': serialize_blog_post(post)})
+
+
+@admin_required
+def admin_newsletter_subscribers(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    subscribers = NewsletterSubscriber.objects.all()
+    return JsonResponse({
+        'count': subscribers.count(),
+        'subscribers': [
+            {'email': subscriber.email, 'subscribed_at': subscriber.subscribed_at.isoformat()}
+            for subscriber in subscribers
+        ],
+    })
 
 
 def cloudinary_upload_signature(folder):

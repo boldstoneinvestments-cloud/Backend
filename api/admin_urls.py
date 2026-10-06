@@ -21,6 +21,7 @@ urlpatterns = [
     path('blog/posts', admin_views.admin_blog_posts),
     path('blog/posts/<int:post_id>', admin_views.admin_blog_post_detail),
     path('blog/upload-signature', admin_views.admin_blog_image_upload_signature),
+    path('newsletter/subscribers', admin_views.admin_newsletter_subscribers),
     path('customers', admin_views.admin_customers),
     path('customers/<str:email>/delete', admin_views.admin_customer_delete),
     path('customers/<int:user_id>/password-reset-link', admin_views.admin_customer_password_reset_link),

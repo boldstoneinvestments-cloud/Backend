@@ -854,6 +854,17 @@ class PasswordResetTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(signing.loads(state, salt='google-oauth-state')['flow'], 'admin')
 
+    def test_newsletter_subscribers_are_only_visible_to_verified_admins(self):
+        NewsletterSubscriber.objects.create(email='reader@example.com')
+
+        self.assertEqual(self.client.get('/api/admin/newsletter/subscribers').status_code, 401)
+        self.authenticate_admin_with_totp()
+        response = self.client.get('/api/admin/newsletter/subscribers')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['count'], 1)
+        self.assertEqual(response.json()['subscribers'][0]['email'], 'reader@example.com')
+
 
 class NewsletterSubscriptionTests(TestCase):
     def subscribe(self, email):
