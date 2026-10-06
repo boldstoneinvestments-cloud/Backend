@@ -83,6 +83,43 @@ class AdminActivity(models.Model):
         ordering = ['-created_at']
 
 
+class BlogPost(models.Model):
+    CATEGORY_CHOICES = (
+        ('News', 'News'),
+        ('Impact', 'Impact'),
+        ('Industry', 'Industry'),
+        ('Company', 'Company'),
+        ('Agronomy', 'Agronomy'),
+    )
+
+    title = models.CharField(max_length=240)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='News')
+    author = models.CharField(max_length=120)
+    date = models.CharField(max_length=80)
+    image = models.URLField(max_length=1000)
+    excerpt = models.TextField()
+    body = models.JSONField(default=list)
+    is_published = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-id']
+
+    def as_payload(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'category': self.category,
+            'author': self.author,
+            'date': self.date,
+            'image': self.image,
+            'excerpt': self.excerpt,
+            'body': self.body,
+            'is_published': self.is_published,
+        }
+
+
 class LeaseApplication(models.Model):
     STATUS_CHOICES = (
         ('new', 'New'),

@@ -3,7 +3,7 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from .admin_cache import invalidate_admin_cache
-from .models import AdminActivity, AdminPresence, ChatMessage, Lease, LeaseApplication, Order
+from .models import AdminActivity, AdminPresence, BlogPost, ChatMessage, Lease, LeaseApplication, Order
 from shop.models import Product, ShopOrder
 
 User = get_user_model()
@@ -40,6 +40,11 @@ def invalidate_chat_cache(sender, instance, **kwargs):
 @receiver([post_save, post_delete], sender=AdminPresence)
 def invalidate_activity_cache(sender, instance, **kwargs):
     invalidate_admin_cache('admin_activity')
+
+
+@receiver([post_save, post_delete], sender=BlogPost)
+def invalidate_blog_cache(sender, instance, **kwargs):
+    invalidate_admin_cache('blog_posts')
 
 
 @receiver([post_save, post_delete], sender=Product)

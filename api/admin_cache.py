@@ -15,6 +15,7 @@ CACHE_TTLS = {
     'admin_activity': 15,
     'customer_chat': 60,
     'shop_products': 300,
+    'blog_posts': 300,
     'estate': 60,
 }
 

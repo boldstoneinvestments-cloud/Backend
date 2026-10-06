@@ -15,7 +15,7 @@ from django.test import Client, TestCase
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from api.admin_cache import get_admin_cache, set_admin_cache
-from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, ChatMessage, Order
+from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, BlogPost, ChatMessage, Order
 from api.views import customer_token
 from email_service import queue_password_reset_email, send_password_reset_email
 from shop.models import Product as ShopProduct, ShopOrder
@@ -647,6 +647,63 @@ class PasswordResetTests(TestCase):
         self.assertEqual(self.client.get('/api/admin/shop/products/updated-admin-roast').status_code, 200)
         public_products = self.client.get('/api/shop/products').json()
         self.assertNotIn('12', [product['id'] for product in public_products['roasted']])
+
+    def test_public_blog_only_returns_published_posts(self):
+        published = BlogPost.objects.create(
+            title='Published story',
+            category='News',
+            author='Boldstone',
+            date='June 17, 2026',
+            image='https://example.com/story.jpg',
+            excerpt='A public story.',
+            body=['First paragraph.'],
+        )
+        BlogPost.objects.create(
+            title='Draft story',
+            category='News',
+            author='Boldstone',
+            date='June 17, 2026',
+            image='https://example.com/draft.jpg',
+            excerpt='A private draft.',
+            body=['Draft paragraph.'],
+            is_published=False,
+        )
+
+        response = self.client.get('/api/blog/posts')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(published.id, [post['id'] for post in response.json()['posts']])
+        self.assertNotIn('Draft story', [post['title'] for post in response.json()['posts']])
+
+    def test_verified_admin_can_create_update_and_delete_blog_posts(self):
+        self.assertEqual(self.client.get('/api/admin/blog/posts').status_code, 401)
+        self.authenticate_admin_with_totp()
+        payload = {
+            'title': 'Admin story',
+            'category': 'Industry',
+            'author': 'Boldstone',
+            'date': 'July 1, 2026',
+            'image': 'https://example.com/story.jpg',
+            'excerpt': 'A story created by an admin.',
+            'body': ['First paragraph.', 'Second paragraph.'],
+        }
+
+        created = self.client.post('/api/admin/blog/posts', payload, content_type='application/json')
+
+        self.assertEqual(created.status_code, 201)
+        post_id = created.json()['post']['id']
+        self.assertIn(post_id, [post['id'] for post in self.client.get('/api/blog/posts').json()['posts']])
+        payload.update({'title': 'Updated admin story', 'is_published': False})
+        updated = self.client.put(f'/api/admin/blog/posts/{post_id}', payload, content_type='application/json')
+
+        self.assertEqual(updated.status_code, 200)
+        self.assertFalse(updated.json()['post']['is_published'])
+        self.assertNotIn(post_id, [post['id'] for post in self.client.get('/api/blog/posts').json()['posts']])
+        deleted = self.client.delete(f'/api/admin/blog/posts/{post_id}')
+
+        self.assertEqual(deleted.status_code, 200)
+        self.assertFalse(BlogPost.objects.filter(pk=post_id).exists())
+        self.assertTrue(AdminActivity.objects.filter(action='Deleted blog post', target_id=str(post_id)).exists())
 
     def test_verified_admin_can_delete_product_and_audit_the_action(self):
         self.authenticate_admin_with_totp()

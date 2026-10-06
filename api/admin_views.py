@@ -22,7 +22,7 @@ from cloudinary.utils import api_sign_request
 
 from .admin_two_factor import IDENTITY_SELECTION_SESSION_KEY, VERIFIED_SESSION_KEY, admin_two_factor_status as get_admin_two_factor_status, begin_admin_two_factor, complete_admin_two_factor
 from .admin_cache import cache_json_response
-from .models import AdminActivity, AdminPresence, ChatMessage, CustomerProfile, LeaseApplication, Order
+from .models import AdminActivity, AdminPresence, BlogPost, ChatMessage, CustomerProfile, LeaseApplication, Order
 from email_service import queue_password_reset_email
 from shop.models import Product, ShopOrder
 
@@ -528,12 +528,106 @@ def admin_shop_product_detail(request, product_id):
     return JsonResponse({'success': True, 'product': serialize_shop_product(product)})
 
 
+def serialize_blog_post(post):
+    return post.as_payload()
+
+
+def validate_blog_post_data(data, existing=None):
+    title = str(data.get('title', existing.title if existing else '')).strip()
+    category = str(data.get('category', existing.category if existing else 'News')).strip()
+    author = str(data.get('author', existing.author if existing else '')).strip()
+    post_date = str(data.get('date', existing.date if existing else '')).strip()
+    image = str(data.get('image', existing.image if existing else '')).strip()
+    excerpt = str(data.get('excerpt', existing.excerpt if existing else '')).strip()
+    body = data.get('body', existing.body if existing else [])
+    is_published = data.get('is_published', existing.is_published if existing else True)
+
+    if not title or len(title) > 240:
+        return None, 'Title is required and must be 240 characters or fewer.'
+    if category not in dict(BlogPost.CATEGORY_CHOICES):
+        return None, 'Choose a valid blog category.'
+    if not author or len(author) > 120:
+        return None, 'Author is required and must be 120 characters or fewer.'
+    if len(post_date) > 80:
+        return None, 'Date must be 80 characters or fewer.'
+    try:
+        URLValidator(schemes=['http', 'https'])(image)
+    except ValidationError:
+        return None, 'Enter a valid image URL.'
+    if not excerpt:
+        return None, 'Excerpt is required.'
+    if isinstance(body, str):
+        body = [paragraph.strip() for paragraph in body.split('\n\n') if paragraph.strip()]
+    if not isinstance(body, list) or not body or any(not isinstance(paragraph, str) or not paragraph.strip() for paragraph in body):
+        return None, 'Article body must contain at least one non-empty paragraph.'
+    if not isinstance(is_published, bool):
+        return None, 'Published status must be true or false.'
+
+    return {
+        'title': title,
+        'category': category,
+        'author': author,
+        'date': post_date or timezone.localdate().strftime('%B %d, %Y'),
+        'image': image,
+        'excerpt': excerpt,
+        'body': [paragraph.strip() for paragraph in body],
+        'is_published': is_published,
+    }, None
+
+
 @csrf_exempt
 @admin_required
-def admin_cloudinary_upload_signature(request):
+def admin_blog_posts(request):
+    if request.method == 'GET':
+        return JsonResponse({'posts': [serialize_blog_post(post) for post in BlogPost.objects.all()]})
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({'error': 'Invalid blog post data.'}, status=400)
+    post_data, error = validate_blog_post_data(data)
+    if error:
+        return JsonResponse({'error': error}, status=400)
+    post = BlogPost.objects.create(**post_data)
+    log_admin_activity(request, 'Created blog post', 'blog post', post.id, {'title': post.title}, page='/admin/blog')
+    return JsonResponse({'success': True, 'post': serialize_blog_post(post)}, status=201)
 
+
+@csrf_exempt
+@admin_required
+def admin_blog_post_detail(request, post_id):
+    post = BlogPost.objects.filter(pk=post_id).first()
+    if post is None:
+        return JsonResponse({'error': 'Blog post not found.'}, status=404)
+    if request.method == 'DELETE':
+        title = post.title
+        post.delete()
+        log_admin_activity(request, 'Deleted blog post', 'blog post', post_id, {'title': title}, page='/admin/blog')
+        return JsonResponse({'success': True})
+    if request.method != 'PUT':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({'error': 'Invalid blog post data.'}, status=400)
+    post_data, error = validate_blog_post_data(data, existing=post)
+    if error:
+        return JsonResponse({'error': error}, status=400)
+    changed_fields = [field for field, value in post_data.items() if getattr(post, field) != value]
+    for field, value in post_data.items():
+        setattr(post, field, value)
+    if changed_fields:
+        post.save(update_fields=changed_fields + ['updated_at'])
+    log_admin_activity(request, 'Updated blog post', 'blog post', post.id, {'changed_fields': changed_fields}, page='/admin/blog')
+    return JsonResponse({'success': True, 'post': serialize_blog_post(post)})
+
+
+def cloudinary_upload_signature(folder):
     cloud_name = os.getenv('CLOUDINARY_CLOUD_NAME', '').strip()
     api_key = os.getenv('CLOUDINARY_API_KEY', '').strip()
     api_secret = os.getenv('CLOUDINARY_API_SECRET', '').strip()
@@ -541,7 +635,6 @@ def admin_cloudinary_upload_signature(request):
         return JsonResponse({'error': 'Cloudinary uploads are not configured on the backend.'}, status=503)
 
     timestamp = int(time.time())
-    folder = 'boldstone/products'
     signed_parameters = {'folder': folder, 'timestamp': timestamp}
     return JsonResponse({
         'cloud_name': cloud_name,
@@ -550,6 +643,22 @@ def admin_cloudinary_upload_signature(request):
         'folder': folder,
         'signature': api_sign_request(signed_parameters, api_secret),
     })
+
+
+@csrf_exempt
+@admin_required
+def admin_cloudinary_upload_signature(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return cloudinary_upload_signature('boldstone/products')
+
+
+@csrf_exempt
+@admin_required
+def admin_blog_image_upload_signature(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return cloudinary_upload_signature('boldstone/blog')
 
 
 @csrf_exempt

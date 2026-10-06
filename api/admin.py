@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import ChatMessage, ContactMessage, Lease, LeaseApplication, Order
+from .models import BlogPost, ChatMessage, ContactMessage, Lease, LeaseApplication, Order
+
+
+@admin.register(BlogPost)
+class BlogPostAdmin(admin.ModelAdmin):
+    list_display = ('title', 'category', 'author', 'date', 'is_published', 'updated_at')
+    list_filter = ('category', 'is_published')
+    search_fields = ('title', 'excerpt', 'author')
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(ChatMessage)
