@@ -230,34 +230,10 @@ def serialize_account(user):
     return {'id': str(profile.public_id), 'name': user.get_full_name(), 'email': user.email}
 
 
-def verify_recaptcha(response_token, remote_ip=''):
-    secret = os.getenv('RECAPTCHA_SECRET_KEY', '').strip()
-    if not secret or not response_token:
-        return False
-    payload = {'secret': secret, 'response': response_token}
-    if remote_ip:
-        payload['remoteip'] = remote_ip
-    verification_request = Request(
-        'https://www.google.com/recaptcha/api/siteverify',
-        data=urlencode(payload).encode(),
-        headers={'Content-Type': 'application/x-www-form-urlencoded'},
-    )
-    try:
-        with urlopen(verification_request, timeout=5) as response:
-            verification = json.loads(response.read())
-        return verification.get('success') is True
-    except Exception:
-        return False
-
-
 def account_signup(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     data = body(request) or {}
-    if not os.getenv('RECAPTCHA_SECRET_KEY', '').strip():
-        return JsonResponse({'error': 'Signup verification is not configured. Please try again later.'}, status=503)
-    if not verify_recaptcha(data.get('recaptcha_token', ''), request.META.get('REMOTE_ADDR', '')):
-        return JsonResponse({'error': 'Please complete the reCAPTCHA check and try again.'}, status=400)
     name = str(data.get('name', '')).strip()
     email = str(data.get('email', '')).strip().lower()
     password = str(data.get('password', ''))
@@ -277,12 +253,13 @@ def account_login(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     data = body(request) or {}
-    if not os.getenv('RECAPTCHA_SECRET_KEY', '').strip():
-        return JsonResponse({'error': 'Sign-in verification is not configured. Please try again later.'}, status=503)
-    if not verify_recaptcha(data.get('recaptcha_token', ''), request.META.get('REMOTE_ADDR', '')):
-        return JsonResponse({'error': 'Please complete the reCAPTCHA check and try again.'}, status=400)
     email = str(data.get('email', '')).strip().lower()
-    user = User.objects.filter(email__iexact=email, is_staff=False, is_active=True).first()
+    user = User.objects.filter(
+        email__iexact=email,
+        is_staff=False,
+        is_active=True,
+        farmer_profile__isnull=True,
+    ).first()
     user = authenticate(username=user.username, password=data.get('password', '')) if user else None
     if user is None:
         return JsonResponse({'error': 'Invalid email or password'}, status=401)

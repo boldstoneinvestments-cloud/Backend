@@ -11,6 +11,16 @@ python manage.py runserver 5000
 
 API endpoints: `GET /api/health`, `GET /api/estate`, `POST /api/estate/invest`, `POST /api/orders`, and `POST /api/contact`.
 
+## Farmer portal
+
+The farmer dashboard uses this same backend. Farmer accounts have separate sign-in and farmer-scoped API tokens, even though their credentials use Django's existing user store.
+
+Farmer authentication endpoints are `POST /api/farmer/auth/sign-up`, `POST /api/farmer/auth/sign-in`, `POST /api/farmer/auth/sign-out`, and `GET`/`PATCH /api/farmer/auth/me`. Send the returned token as `Authorization: Bearer <token>` to access `GET /api/farmer/dashboard`, `/performance`, `/prices`, `/agronomy`, `/harvest`, `/opportunities`, `/rewards`, `/advice`, and `/loans`.
+
+Farmers can add agronomy tasks and mark their tasks complete, submit or update harvest estimates, record coffee deliveries, and submit loan applications. All records are scoped to their own farm. Payment status and loan review status remain admin-controlled. Prices, yield/performance records, opportunities, reward balances and rules, advice banners/articles, and portal settings are managed in Django admin. Configure interest rate, weather guidance, and dashboard notices under Farmer portal settings. Add initial coffee prices and publish advice/opportunities before expecting those pages to show content.
+
+Apply schema changes with `python manage.py migrate` before starting the backend.
+
 ## Railway
 
 Create the Railway service from this repository with the service root directory set to the repository root (leave the root directory unset). `manage.py`, `requirements.txt`, and `railway.toml` are at the repository root. Railway will use `railway.toml` to run migrations and start Gunicorn. Set `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, and `CORS_ALLOWED_ORIGINS` in the Railway service variables.
@@ -18,8 +28,6 @@ Create the Railway service from this repository with the service root directory 
 For shared caching across backend workers, add a Railway Redis service and set this service's `REDIS_URL` variable to the Redis service's private connection URL. Admin users, customers, orders, lease applications, chats, activity, product catalog, estate totals, and customer chat responses are cached and invalidated when their source data changes. Without Redis, the backend falls back to per-process memory caching.
 
 For signed shop image uploads, set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in the Railway **Backend** service variables. The API secret is only used by the backend to sign uploads and is never sent to the browser.
-
-Set the matching reCAPTCHA secret as `RECAPTCHA_SECRET_KEY` in this backend service. The public site key belongs in the frontend build environment; do not put it in this backend-only setting or expose the secret in frontend variables.
 
 Set `ADMIN_USERNAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in Railway variables. The deployment creates the admin account automatically, and you can view shop orders at `https://your-backend-domain/admin/shop/shoporder/`.
 

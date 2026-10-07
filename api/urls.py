@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import farmer_views
 
 urlpatterns = [
     path('health', views.health),
@@ -23,4 +24,21 @@ urlpatterns = [
     path('chat/attachments/<int:message_id>', views.chat_attachment),
     path('chat/stream', views.chat_stream),
     path('lease-applications', views.lease_applications),
+    path('farmer/auth/sign-up', farmer_views.farmer_sign_up),
+    path('farmer/auth/sign-in', farmer_views.farmer_sign_in),
+    path('farmer/auth/sign-out', farmer_views.farmer_sign_out),
+    path('farmer/auth/me', farmer_views.farmer_me),
+    path('farmer/dashboard', farmer_views.farmer_dashboard),
+    path('farmer/performance', farmer_views.farmer_performance),
+    path('farmer/prices', farmer_views.farmer_prices),
+    path('farmer/agronomy', farmer_views.farmer_agronomy),
+    path('farmer/agronomy/tasks/<int:task_id>', farmer_views.farmer_agronomy_task),
+    path('farmer/harvest', farmer_views.farmer_harvest),
+    path('farmer/harvest/estimates', farmer_views.farmer_harvest_estimate),
+    path('farmer/harvest/sales', farmer_views.farmer_sale),
+    path('farmer/opportunities', farmer_views.farmer_opportunities),
+    path('farmer/rewards', farmer_views.farmer_rewards),
+    path('farmer/advice', farmer_views.farmer_advice),
+    path('farmer/advice/<slug:slug>', farmer_views.farmer_advice),
+    path('farmer/loans', farmer_views.farmer_loans),
 ]

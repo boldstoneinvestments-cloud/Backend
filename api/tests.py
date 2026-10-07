@@ -3,6 +3,7 @@ from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
+from decimal import Decimal
 import time
 
 from django.contrib.auth import get_user_model
@@ -15,8 +16,26 @@ from django.test import Client, TestCase
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from api.admin_cache import get_admin_cache, set_admin_cache
-from api.models import AdminActivity, AdminPresence, AdminRecoveryCodes, BlogPost, ChatMessage, NewsletterSubscriber, Order
+from api.models import (
+    AdminActivity,
+    AdminPresence,
+    AdminRecoveryCodes,
+    BlogPost,
+    ChatMessage,
+    FarmerAgronomyTask,
+    FarmerCoffeePrice,
+    FarmerCoffeeSale,
+    FarmerFarm,
+    FarmerHarvestEstimate,
+    FarmerLoanApplication,
+    FarmerOpportunity,
+    FarmerPortalSettings,
+    FarmerProfile,
+    NewsletterSubscriber,
+    Order,
+)
 from api.views import customer_token
+from api.farmer_views import _farmer_token
 from email_service import queue_password_reset_email, send_password_reset_email
 from shop.models import Product as ShopProduct, ShopOrder
 
@@ -86,90 +105,31 @@ class PasswordResetTests(TestCase):
         self.assertTrue(queued)
         submit.assert_called_once_with(send_password_reset_email, self.customer, reset_url)
 
-    @patch.dict('os.environ', {'RECAPTCHA_SECRET_KEY': 'test-secret'})
-    @patch('api.views.verify_recaptcha', return_value=False)
-    def test_signup_rejects_unverified_recaptcha(self, verify_captcha):
+    @patch.dict('os.environ', {}, clear=True)
+    def test_signup_creates_account_without_third_party_verification(self):
         response = self.client.post(
             '/api/account/sign-up',
             {
                 'name': 'New Customer',
                 'email': 'new@example.com',
                 'password': 'valid-password',
-                'recaptcha_token': 'invalid-token',
-            },
-            content_type='application/json',
-        )
-
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(User.objects.filter(email='new@example.com').exists())
-        verify_captcha.assert_called_once()
-
-    @patch.dict('os.environ', {'RECAPTCHA_SECRET_KEY': 'test-secret'})
-    @patch('api.views.verify_recaptcha', return_value=True)
-    def test_signup_creates_account_only_after_recaptcha_verifies(self, verify_captcha):
-        response = self.client.post(
-            '/api/account/sign-up',
-            {
-                'name': 'New Customer',
-                'email': 'new@example.com',
-                'password': 'valid-password',
-                'recaptcha_token': 'verified-token',
             },
             content_type='application/json',
         )
 
         self.assertEqual(response.status_code, 201)
         self.assertTrue(User.objects.filter(email='new@example.com').exists())
-        verify_captcha.assert_called_once()
 
-    @patch.dict('os.environ', {'RECAPTCHA_SECRET_KEY': ''})
-    @patch('api.views.verify_recaptcha')
-    def test_signup_fails_closed_when_recaptcha_secret_is_missing(self, verify_captcha):
-        response = self.client.post(
-            '/api/account/sign-up',
-            {'name': 'New Customer', 'email': 'new@example.com', 'password': 'valid-password'},
-            content_type='application/json',
-        )
-
-        self.assertEqual(response.status_code, 503)
-        verify_captcha.assert_not_called()
-
-    @patch.dict('os.environ', {'RECAPTCHA_SECRET_KEY': 'test-secret'})
-    @patch('api.views.verify_recaptcha', return_value=False)
-    def test_signin_rejects_unverified_recaptcha(self, verify_captcha):
-        response = self.client.post(
-            '/api/account/sign-in',
-            {'email': self.customer.email, 'password': 'old-customer-password', 'recaptcha_token': 'invalid-token'},
-            content_type='application/json',
-        )
-
-        self.assertEqual(response.status_code, 400)
-        verify_captcha.assert_called_once()
-
-    @patch.dict('os.environ', {'RECAPTCHA_SECRET_KEY': 'test-secret'})
-    @patch('api.views.verify_recaptcha', return_value=True)
-    def test_signin_succeeds_after_recaptcha_verifies(self, verify_captcha):
-        response = self.client.post(
-            '/api/account/sign-in',
-            {'email': self.customer.email, 'password': 'old-customer-password', 'recaptcha_token': 'verified-token'},
-            content_type='application/json',
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['user']['email'], self.customer.email)
-        verify_captcha.assert_called_once()
-
-    @patch.dict('os.environ', {'RECAPTCHA_SECRET_KEY': ''})
-    @patch('api.views.verify_recaptcha')
-    def test_signin_fails_closed_when_recaptcha_secret_is_missing(self, verify_captcha):
+    @patch.dict('os.environ', {}, clear=True)
+    def test_signin_succeeds_without_third_party_verification(self):
         response = self.client.post(
             '/api/account/sign-in',
             {'email': self.customer.email, 'password': 'old-customer-password'},
             content_type='application/json',
         )
 
-        self.assertEqual(response.status_code, 503)
-        verify_captcha.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['user']['email'], self.customer.email)
 
     def test_admin_session_and_api_require_staff(self):
         self.assertEqual(self.client.get('/api/admin/session').status_code, 401)
@@ -897,3 +857,202 @@ class NewsletterSubscriptionTests(TestCase):
 
     def test_subscription_requires_post(self):
         self.assertEqual(self.client.get('/api/newsletter/subscribe').status_code, 405)
+
+
+class FarmerApiTests(TestCase):
+    def create_farmer(self, email='farmer@example.com'):
+        user = User.objects.create_user(username=email, email=email, password='farmer-password')
+        profile = FarmerProfile.objects.create(user=user)
+        farm = FarmerFarm.objects.create(
+            farmer=profile,
+            name='Kasenene Farm',
+            location='Kyenjojo',
+            district='Kyenjojo',
+            acres='12.40',
+        )
+        return user, profile, farm, _farmer_token(profile)
+
+    def farmer_request(self, method, path, token, data=None):
+        return getattr(self.client, method)(
+            path,
+            data,
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {token}',
+        )
+
+    def test_farmer_pages_require_farmer_token_not_customer_token(self):
+        customer = User.objects.create_user(
+            username='customer@example.com',
+            email='customer@example.com',
+            password='customer-password',
+        )
+
+        self.assertEqual(self.client.get('/api/farmer/dashboard').status_code, 401)
+        self.assertEqual(
+            self.client.get(
+                '/api/farmer/dashboard',
+                HTTP_AUTHORIZATION=f'Bearer {customer_token(customer)}',
+            ).status_code,
+            401,
+        )
+
+    def test_farmer_account_cannot_sign_in_through_customer_auth(self):
+        user, _, _, _ = self.create_farmer()
+
+        response = self.client.post(
+            '/api/account/sign-in',
+            {
+                'email': user.email,
+                'password': 'farmer-password',
+            },
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_farmer_signup_creates_separate_profile_and_farm(self):
+        User.objects.create_user(
+            username='customer@example.com',
+            email='amina@example.com',
+            password='customer-password',
+        )
+        response = self.client.post(
+            '/api/farmer/auth/sign-up',
+            {
+                'name': 'Amina Farmer',
+                'email': 'amina@example.com',
+                'password': 'a-secure-password',
+                'phone': '+256700000000',
+                'farm_name': 'Amina Coffee Farm',
+                'location': 'Kyenjojo',
+                'district': 'Kyenjojo',
+                'acres': '4.5',
+            },
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(FarmerProfile.objects.filter(user__email='amina@example.com').exists())
+        self.assertEqual(response.json()['farmer']['farm']['name'], 'Amina Coffee Farm')
+        self.assertEqual(User.objects.filter(email='amina@example.com').count(), 2)
+        self.assertEqual(self.client.get(
+            '/api/farmer/auth/me',
+            HTTP_AUTHORIZATION=f"Bearer {response.json()['token']}",
+        ).status_code, 200)
+
+    def test_farmer_can_only_update_tasks_for_their_own_farm(self):
+        _, _, farm, token = self.create_farmer()
+        _, _, other_farm, _ = self.create_farmer('other@example.com')
+        other_task = FarmerAgronomyTask.objects.create(farm=other_farm, title='Other farm task')
+        own_task = FarmerAgronomyTask.objects.create(farm=farm, title='My farm task')
+
+        denied = self.farmer_request(
+            'patch', f'/api/farmer/agronomy/tasks/{other_task.id}', token, {'status': 'completed'},
+        )
+        allowed = self.farmer_request(
+            'patch', f'/api/farmer/agronomy/tasks/{own_task.id}', token, {'status': 'completed'},
+        )
+
+        self.assertEqual(denied.status_code, 404)
+        self.assertEqual(allowed.status_code, 200)
+        own_task.refresh_from_db()
+        other_task.refresh_from_db()
+        self.assertEqual(own_task.status, 'completed')
+        self.assertEqual(other_task.status, 'open')
+
+    def test_invalid_farm_edit_does_not_partially_save_phone(self):
+        _, profile, farm, token = self.create_farmer()
+
+        response = self.farmer_request('patch', '/api/farmer/auth/me', token, {
+            'phone': '+256700000001',
+            'farm': {'name': ''},
+        })
+
+        self.assertEqual(response.status_code, 400)
+        profile.refresh_from_db()
+        farm.refresh_from_db()
+        self.assertEqual(profile.phone, '')
+        self.assertEqual(farm.name, 'Kasenene Farm')
+
+    def test_dashboard_returns_admin_seeded_data_for_farmer(self):
+        _, _, farm, token = self.create_farmer()
+        FarmerCoffeePrice.objects.create(
+            coffee_type='robusta', grade='Robusta FAQ', price_per_kg='8750',
+        )
+        FarmerAgronomyTask.objects.create(
+            farm=farm, title='Inspect north block', is_urgent=True,
+        )
+
+        response = self.farmer_request('get', '/api/farmer/dashboard', token)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['farm']['name'], 'Kasenene Farm')
+        self.assertEqual(response.json()['metrics']['coffee_price_per_kg'], '8750.00')
+        self.assertEqual(response.json()['priority_task']['title'], 'Inspect north block')
+
+    def test_loan_terms_are_calculated_from_admin_settings_and_price(self):
+        _, _, farm, token = self.create_farmer()
+        FarmerPortalSettings.objects.create(interest_rate='12.50')
+        FarmerCoffeePrice.objects.create(
+            coffee_type='robusta', grade='Robusta FAQ', price_per_kg='10000',
+        )
+
+        response = self.farmer_request('post', '/api/farmer/loans', token, {
+            'loan_type': 'cash',
+            'amount_requested': '1000000',
+            'coffee_grade': 'Robusta FAQ',
+            'application_date': '2026-10-07',
+        })
+
+        self.assertEqual(response.status_code, 201)
+        application = FarmerLoanApplication.objects.get(farm=farm)
+        self.assertEqual(application.interest_rate, Decimal('12.50'))
+        self.assertEqual(application.repayment_amount, Decimal('1125000.00'))
+        self.assertEqual(application.repayment_coffee_kg, Decimal('112.50'))
+        self.assertEqual(response.json()['application']['status'], 'submitted')
+
+    def test_farmer_harvest_and_delivery_submissions_are_saved_to_owned_farm(self):
+        _, _, farm, token = self.create_farmer()
+        estimate = self.farmer_request('post', '/api/farmer/harvest/estimates', token, {
+            'season': 'Main harvest 2026/2027',
+            'coffee_type': 'robusta',
+            'expected_quantity_kg': '1250.5',
+        })
+        sale = self.farmer_request('post', '/api/farmer/harvest/sales', token, {
+            'delivery_date': '2026-10-01',
+            'grade': 'Robusta FAQ',
+            'quantity_kg': '125',
+            'price_per_kg': '8500',
+            'buyer': 'Local buyer',
+        })
+
+        self.assertEqual(estimate.status_code, 201)
+        self.assertEqual(sale.status_code, 201)
+        self.assertEqual(FarmerHarvestEstimate.objects.get(farm=farm).expected_quantity_kg, Decimal('1250.50'))
+        self.assertEqual(FarmerCoffeeSale.objects.get(farm=farm).payment_status, 'pending')
+
+        harvest = self.farmer_request('get', '/api/farmer/harvest', token)
+        self.assertEqual(harvest.json()['summary']['coffee_sold_kg'], '125.00')
+        self.assertEqual(harvest.json()['sales'][0]['payment_status'], 'pending')
+
+    def test_opportunities_only_return_admin_published_items(self):
+        _, _, _, token = self.create_farmer()
+        FarmerOpportunity.objects.create(
+            opportunity_type='training', title='Published clinic', detail='Training details', is_published=True,
+        )
+        FarmerOpportunity.objects.create(
+            opportunity_type='training', title='Draft clinic', detail='Draft details', is_published=False,
+        )
+
+        response = self.farmer_request('get', '/api/farmer/opportunities', token)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item['title'] for item in response.json()['opportunities']], ['Published clinic'])
+
+    def test_sign_out_revokes_farmer_token(self):
+        _, _, _, token = self.create_farmer()
+
+        response = self.farmer_request('post', '/api/farmer/auth/sign-out', token)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.farmer_request('get', '/api/farmer/auth/me', token).status_code, 401)
